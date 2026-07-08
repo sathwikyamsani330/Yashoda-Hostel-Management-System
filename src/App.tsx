@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 
 const logoImage = '/src/assets/images/peacock_vel_logo_1783414034362.jpg';
@@ -22,6 +22,27 @@ import {
 import { Room, Resident, Payment, Complaint, PaymentMethod, ComplaintStatus, Expense } from './types';
 import { loadState, saveState, formatCurrency } from './utils';
 
+// Firebase imports
+import { collection, onSnapshot } from 'firebase/firestore';
+import { 
+  db, 
+  seedDatabaseIfEmpty,
+  dbAddRoom, 
+  dbEditRoom, 
+  dbAddResident, 
+  dbEditResident, 
+  dbDeleteResident, 
+  dbAddPayment, 
+  dbEditPayment, 
+  dbDeletePayment, 
+  dbAddComplaint, 
+  dbEditComplaint, 
+  dbDeleteComplaint, 
+  dbAddExpense, 
+  dbDeleteExpense 
+} from './firebase';
+import { INITIAL_ROOMS, INITIAL_RESIDENTS, INITIAL_PAYMENTS, INITIAL_COMPLAINTS, INITIAL_EXPENSES } from './data';
+
 // Import sub-components
 import Dashboard from './components/Dashboard';
 import RoomManager from './components/RoomManager';
@@ -32,14 +53,107 @@ import StudentPortal from './components/StudentPortal';
 import { Lock, Eye, EyeOff, LogOut, ArrowRight } from 'lucide-react';
 
 export default function App() {
-  // Load initial states
-  const initialState = loadState();
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [residents, setResidents] = useState<Resident[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
 
-  const [rooms, setRooms] = useState<Room[]>(initialState.rooms);
-  const [residents, setResidents] = useState<Resident[]>(initialState.residents);
-  const [payments, setPayments] = useState<Payment[]>(initialState.payments);
-  const [complaints, setComplaints] = useState<Complaint[]>(initialState.complaints);
-  const [expenses, setExpenses] = useState<Expense[]>(initialState.expenses);
+  // State to track if Firestore data has loaded
+  const [dataLoaded, setDataLoaded] = useState({
+    rooms: false,
+    residents: false,
+    payments: false,
+    complaints: false,
+    expenses: false
+  });
+  const [isAllDataLoaded, setIsAllDataLoaded] = useState(false);
+  const schedulerHasRun = useRef(false);
+
+  // 1. Seed database on load
+  useEffect(() => {
+    const runSeeding = async () => {
+      await seedDatabaseIfEmpty(
+        INITIAL_ROOMS,
+        INITIAL_RESIDENTS,
+        INITIAL_PAYMENTS,
+        INITIAL_COMPLAINTS,
+        INITIAL_EXPENSES
+      );
+    };
+    runSeeding();
+  }, []);
+
+  // 2. Subscribe to Firestore collections in real time
+  useEffect(() => {
+    const unsubRooms = onSnapshot(collection(db, 'rooms'), (snapshot) => {
+      const list: Room[] = [];
+      snapshot.forEach(doc => {
+        list.push(doc.data() as Room);
+      });
+      setRooms(list);
+      setDataLoaded(prev => ({ ...prev, rooms: true }));
+    }, (error) => console.error("Error fetching rooms: ", error));
+
+    const unsubResidents = onSnapshot(collection(db, 'residents'), (snapshot) => {
+      const list: Resident[] = [];
+      snapshot.forEach(doc => {
+        list.push(doc.data() as Resident);
+      });
+      setResidents(list);
+      setDataLoaded(prev => ({ ...prev, residents: true }));
+    }, (error) => console.error("Error fetching residents: ", error));
+
+    const unsubPayments = onSnapshot(collection(db, 'payments'), (snapshot) => {
+      const list: Payment[] = [];
+      snapshot.forEach(doc => {
+        list.push(doc.data() as Payment);
+      });
+      setPayments(list);
+      setDataLoaded(prev => ({ ...prev, payments: true }));
+    }, (error) => console.error("Error fetching payments: ", error));
+
+    const unsubComplaints = onSnapshot(collection(db, 'complaints'), (snapshot) => {
+      const list: Complaint[] = [];
+      snapshot.forEach(doc => {
+        list.push(doc.data() as Complaint);
+      });
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setComplaints(list);
+      setDataLoaded(prev => ({ ...prev, complaints: true }));
+    }, (error) => console.error("Error fetching complaints: ", error));
+
+    const unsubExpenses = onSnapshot(collection(db, 'expenses'), (snapshot) => {
+      const list: Expense[] = [];
+      snapshot.forEach(doc => {
+        list.push(doc.data() as Expense);
+      });
+      list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setExpenses(list);
+      setDataLoaded(prev => ({ ...prev, expenses: true }));
+    }, (error) => console.error("Error fetching expenses: ", error));
+
+    return () => {
+      unsubRooms();
+      unsubResidents();
+      unsubPayments();
+      unsubComplaints();
+      unsubExpenses();
+    };
+  }, []);
+
+  // 3. Monitor data loading status
+  useEffect(() => {
+    if (
+      dataLoaded.rooms &&
+      dataLoaded.residents &&
+      dataLoaded.payments &&
+      dataLoaded.complaints &&
+      dataLoaded.expenses
+    ) {
+      setIsAllDataLoaded(true);
+    }
+  }, [dataLoaded]);
 
   // Active Hostel Context
   const [activeHostelId, setActiveHostelId] = useState<'1' | '2'>('1');
@@ -147,8 +261,8 @@ export default function App() {
     localStorage.removeItem('admin_authenticated');
   };
 
-  const handleAddStudentComplaint = (newComplaint: Complaint) => {
-    setComplaints(prev => [newComplaint, ...prev]);
+  const handleAddStudentComplaint = async (newComplaint: Complaint) => {
+    await dbAddComplaint(newComplaint);
   };
 
   // Helper to get Today's Date String
@@ -180,110 +294,111 @@ export default function App() {
     return { rentAmount, busFeeAmount, totalAmount: rentAmount + busFeeAmount };
   };
 
-  // Background scheduler running on application load
+  // Scheduler running once data is loaded from Firestore
   useEffect(() => {
-    const today = getTodayDateStr();
-    let stateChanged = false;
-    let updatedPayments = [...payments];
-    let updatedResidents = [...residents];
+    if (!isAllDataLoaded || schedulerHasRun.current) return;
+    schedulerHasRun.current = true;
 
-    // Part A: Automatically transition pending invoices to Overdue if past due date
-    updatedPayments = updatedPayments.map(p => {
-      if (p.status === 'Pending' && p.dueDate < today) {
-        stateChanged = true;
-        return { ...p, status: 'Overdue' as const };
-      }
-      return p;
-    });
+    const runScheduler = async () => {
+      const today = getTodayDateStr();
+      let stateChanged = false;
+      const updatedPayments = [...payments];
+      const updatedResidents = [...residents];
 
-    // Part B: Automatically generate subsequent invoices for Active residents based on check-in date
-    updatedResidents = updatedResidents.map(res => {
-      if (res.status !== 'Active' || !res.roomId) return res;
-
-      const room = rooms.find(r => r.id === res.roomId && r.hostelId === res.hostelId);
-      const { rentAmount, busFeeAmount, totalAmount } = getResidentBillingAmounts(res, room);
-
-      // Start from check-in date and progress by interval
-      let anniversary = res.checkInDate;
-      const intervalMonths = res.paymentPlan === '6 Months' ? 6 : 1;
-
-      // Keep generating cycles until the anniversary goes past today
-      while (anniversary <= today) {
-        const dateObj = new Date(anniversary);
-        let monthName = dateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
-        
-        if (res.paymentPlan === '6 Months') {
-          // Format e.g., "Jan 2026 - Jun 2026"
-          const endCycleDate = new Date(anniversary);
-          endCycleDate.setMonth(endCycleDate.getMonth() + 5);
-          const startStr = dateObj.toLocaleString('default', { month: 'short', year: 'numeric' });
-          const endStr = endCycleDate.toLocaleString('default', { month: 'short', year: 'numeric' });
-          monthName = `${startStr} - ${endStr}`;
-        }
-
-        // Check if an invoice for this specific anniversary / billing month already exists
-        const invoiceExists = updatedPayments.some(p => 
-          p.residentId === res.id && 
-          (p.dueDate === anniversary || p.month === monthName)
-        );
-
-        if (!invoiceExists) {
-          const isOverdue = anniversary < today;
-          const invoiceStatus = isOverdue ? 'Overdue' : 'Pending';
-
-          const newInvoice: Payment = {
-            id: `pay-auto-${res.id.slice(-4)}-${anniversary.replace(/-/g, '')}`,
-            hostelId: res.hostelId,
-            residentId: res.id,
-            residentName: res.name,
-            roomId: res.roomId,
-            amount: totalAmount,
-            month: monthName,
-            dueDate: anniversary,
-            status: invoiceStatus as any,
-            paidDate: null,
-            paymentMethod: null,
-            busAmount: busFeeAmount,
-            busStatus: res.busOption ? 'Pending' : 'Not Subscribed',
-            busPaymentMethod: null,
-            busReceivedBy: undefined,
-            amountPaid: 0,
-            balance: totalAmount,
-            packageType: res.paymentPlan || 'Monthly',
-            checkInDate: res.checkInDate,
-            monthlyFee: rentAmount / (res.paymentPlan === '6 Months' ? 6 : 1)
-          };
-
-          updatedPayments.push(newInvoice);
-          
-          // Increment resident outstanding balance
-          res = {
-            ...res,
-            outstandingFees: res.outstandingFees + totalAmount
-          };
-          
+      // Part A: Automatically transition pending invoices to Overdue if past due date
+      for (let i = 0; i < updatedPayments.length; i++) {
+        const p = updatedPayments[i];
+        if (p.status === 'Pending' && p.dueDate < today) {
+          const updatedP = { ...p, status: 'Overdue' as const };
+          updatedPayments[i] = updatedP;
+          await dbEditPayment(updatedP);
           stateChanged = true;
         }
-
-        // Advance to next cycle date
-        const nextDate = new Date(anniversary);
-        nextDate.setMonth(nextDate.getMonth() + intervalMonths);
-        anniversary = nextDate.toISOString().split('T')[0];
       }
 
-      return res;
-    });
+      // Part B: Automatically generate subsequent invoices for Active residents based on check-in date
+      for (let i = 0; i < updatedResidents.length; i++) {
+        let res = updatedResidents[i];
+        if (res.status !== 'Active' || !res.roomId) continue;
 
-    if (stateChanged) {
-      setPayments(updatedPayments);
-      setResidents(updatedResidents);
-    }
-  }, []); // Run on initial load only
+        const room = rooms.find(r => r.id === res.roomId && r.hostelId === res.hostelId);
+        const { rentAmount, busFeeAmount, totalAmount } = getResidentBillingAmounts(res, room);
 
-  // Sync state to local storage on modification
-  useEffect(() => {
-    saveState({ rooms, residents, payments, complaints, expenses });
-  }, [rooms, residents, payments, complaints, expenses]);
+        // Start from check-in date and progress by interval
+        let anniversary = res.checkInDate;
+        const intervalMonths = res.paymentPlan === '6 Months' ? 6 : 1;
+
+        // Keep generating cycles until the anniversary goes past today
+        while (anniversary <= today) {
+          const dateObj = new Date(anniversary);
+          let monthName = dateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
+          
+          if (res.paymentPlan === '6 Months') {
+            // Format e.g., "Jan 2026 - Jun 2026"
+            const endCycleDate = new Date(anniversary);
+            endCycleDate.setMonth(endCycleDate.getMonth() + 5);
+            const startStr = dateObj.toLocaleString('default', { month: 'short', year: 'numeric' });
+            const endStr = endCycleDate.toLocaleString('default', { month: 'short', year: 'numeric' });
+            monthName = `${startStr} - ${endStr}`;
+          }
+
+          // Check if an invoice for this specific anniversary / billing month already exists
+          const invoiceExists = updatedPayments.some(p => 
+            p.residentId === res.id && 
+            (p.dueDate === anniversary || p.month === monthName)
+          );
+
+          if (!invoiceExists) {
+            const isOverdue = anniversary < today;
+            const invoiceStatus = isOverdue ? 'Overdue' : 'Pending';
+
+            const newInvoice: Payment = {
+              id: `pay-auto-${res.id.slice(-4)}-${anniversary.replace(/-/g, '')}`,
+              hostelId: res.hostelId,
+              residentId: res.id,
+              residentName: res.name,
+              roomId: res.roomId,
+              amount: totalAmount,
+              month: monthName,
+              dueDate: anniversary,
+              status: invoiceStatus as any,
+              paidDate: null,
+              paymentMethod: null,
+              busAmount: busFeeAmount,
+              busStatus: res.busOption ? 'Pending' : 'Not Subscribed',
+              busPaymentMethod: null,
+              busReceivedBy: undefined,
+              amountPaid: 0,
+              balance: totalAmount,
+              packageType: res.paymentPlan || 'Monthly',
+              checkInDate: res.checkInDate,
+              monthlyFee: rentAmount / (res.paymentPlan === '6 Months' ? 6 : 1)
+            };
+
+            await dbAddPayment(newInvoice);
+            updatedPayments.push(newInvoice);
+            
+            // Increment resident outstanding balance
+            res = {
+              ...res,
+              outstandingFees: res.outstandingFees + totalAmount
+            };
+            await dbEditResident(res);
+            updatedResidents[i] = res;
+            
+            stateChanged = true;
+          }
+
+          // Advance to next cycle date
+          const nextDate = new Date(anniversary);
+          nextDate.setMonth(nextDate.getMonth() + intervalMonths);
+          anniversary = nextDate.toISOString().split('T')[0];
+        }
+      }
+    };
+
+    runScheduler();
+  }, [isAllDataLoaded, rooms, residents, payments]);
 
   // Handle Quick Actions
   const handleQuickAction = (action: string) => {
@@ -303,41 +418,35 @@ export default function App() {
     }
   };
 
-  // State modification dispatchers
-  const handleAddRoom = (newRoom: Room) => {
+  // State modification dispatchers using Firestore
+  const handleAddRoom = async (newRoom: Room) => {
     const roomWithHostel: Room = {
       ...newRoom,
       hostelId: activeHostelId
     };
-    setRooms(prev => [...prev, roomWithHostel]);
+    await dbAddRoom(roomWithHostel);
   };
 
-  const handleEditRoom = (updatedRoom: Room) => {
-    setRooms(prev => prev.map(r => r.id === updatedRoom.id && r.hostelId === activeHostelId ? { ...updatedRoom, hostelId: activeHostelId } : r));
+  const handleEditRoom = async (updatedRoom: Room) => {
+    await dbEditRoom({ ...updatedRoom, hostelId: activeHostelId });
   };
 
-  const handleCheckIn = (newResident: Resident, roomId: string) => {
+  const handleCheckIn = async (newResident: Resident, roomId: string) => {
     // 1. Add resident with hostelId
     const residentWithHostel: Resident = {
       ...newResident,
       hostelId: activeHostelId
     };
-    setResidents(prev => [...prev, residentWithHostel]);
 
     // 2. Assign resident to the room in the active hostel
-    setRooms(prev => prev.map(room => {
-      if (room.id === roomId && room.hostelId === activeHostelId) {
-        return {
-          ...room,
-          residentIds: [...room.residentIds, newResident.id]
-        };
-      }
-      return room;
-    }));
-
-    // 3. Generate initial pending rent invoice for this resident
     const room = rooms.find(r => r.id === roomId && r.hostelId === activeHostelId);
     if (room) {
+      const updatedRoom: Room = {
+        ...room,
+        residentIds: [...room.residentIds, newResident.id]
+      };
+
+      // 3. Generate initial pending rent invoice for this resident
       let rentAmount = room.rent;
       let busFeeAmount = 0;
 
@@ -371,178 +480,162 @@ export default function App() {
         busReceivedBy: undefined
       };
 
-      setPayments(prev => [...prev, initialPayment]);
-
       // 4. Update the resident's outstanding balance
-      setResidents(prev => prev.map(res => {
-        if (res.id === newResident.id && res.hostelId === activeHostelId) {
-          return {
-            ...res,
-            outstandingFees: totalAmount
-          };
-        }
-        return res;
-      }));
+      const finalResident = {
+        ...residentWithHostel,
+        outstandingFees: totalAmount
+      };
+
+      await dbAddResident(finalResident);
+      await dbEditRoom(updatedRoom);
+      await dbAddPayment(initialPayment);
     }
   };
 
-  const handleCheckOut = (residentId: string) => {
+  const handleCheckOut = async (residentId: string) => {
     const resident = residents.find(r => r.id === residentId && r.hostelId === activeHostelId);
     if (!resident) return;
 
     // 1. Mark checked-out
-    setResidents(prev => prev.map(res => {
-      if (res.id === residentId && res.hostelId === activeHostelId) {
-        return {
-          ...res,
-          status: 'Checked-Out',
-          roomId: null,
-          checkOutDate: new Date().toISOString().split('T')[0]
-        };
-      }
-      return res;
-    }));
+    const updatedResident = {
+      ...resident,
+      status: 'Checked-Out' as const,
+      roomId: null,
+      checkOutDate: new Date().toISOString().split('T')[0]
+    };
+    await dbEditResident(updatedResident);
 
     // 2. Remove from room list
     if (resident.roomId) {
-      setRooms(prev => prev.map(room => {
-        if (room.id === resident.roomId && room.hostelId === activeHostelId) {
-          return {
-            ...room,
-            residentIds: room.residentIds.filter(id => id !== residentId)
-          };
-        }
-        return room;
-      }));
+      const room = rooms.find(r => r.id === resident.roomId && r.hostelId === activeHostelId);
+      if (room) {
+        const updatedRoom = {
+          ...room,
+          residentIds: room.residentIds.filter(id => id !== residentId)
+        };
+        await dbEditRoom(updatedRoom);
+      }
     }
   };
 
-  const handleDeleteResident = (residentId: string, resetStats?: boolean) => {
+  const handleDeleteResident = async (residentId: string, resetStats?: boolean) => {
     const resident = residents.find(r => r.id === residentId);
     if (resident) {
       if (resident.roomId) {
-        setRooms(prev => prev.map(room => {
-          if (room.id === resident.roomId && room.hostelId === resident.hostelId) {
-            return {
-              ...room,
-              residentIds: room.residentIds.filter(id => id !== residentId)
-            };
-          }
-          return room;
-        }));
+        const room = rooms.find(r => r.id === resident.roomId && r.hostelId === resident.hostelId);
+        if (room) {
+          const updatedRoom = {
+            ...room,
+            residentIds: room.residentIds.filter(id => id !== residentId)
+          };
+          await dbEditRoom(updatedRoom);
+        }
       }
       if (resetStats) {
-        setPayments(prev => prev.filter(p => p.residentId !== residentId));
+        const residentPayments = payments.filter(p => p.residentId === residentId);
+        for (const p of residentPayments) {
+          await dbDeletePayment(p.id);
+        }
       }
     }
-    setResidents(prev => prev.filter(r => r.id !== residentId));
+    await dbDeleteResident(residentId);
   };
 
-  const handleClearCheckedOut = () => {
-    setResidents(prev => prev.filter(r => !(r.status === 'Checked-Out' && r.hostelId === activeHostelId)));
+  const handleClearCheckedOut = async () => {
+    const toDelete = residents.filter(r => r.status === 'Checked-Out' && r.hostelId === activeHostelId);
+    for (const res of toDelete) {
+      await dbDeleteResident(res.id);
+    }
   };
 
-  const handleClearAllActiveCheckins = () => {
-    setRooms(prev => prev.map(room => {
-      if (room.hostelId === activeHostelId) {
-        return {
-          ...room,
-          residentIds: []
-        };
-      }
-      return room;
-    }));
-    setResidents(prev => prev.filter(r => !(r.status === 'Active' && r.hostelId === activeHostelId)));
+  const handleClearAllActiveCheckins = async () => {
+    const activeRooms = rooms.filter(room => room.hostelId === activeHostelId);
+    for (const room of activeRooms) {
+      const updatedRoom = { ...room, residentIds: [] };
+      await dbEditRoom(updatedRoom);
+    }
+
+    const activeResidents = residents.filter(r => r.status === 'Active' && r.hostelId === activeHostelId);
+    for (const res of activeResidents) {
+      await dbDeleteResident(res.id);
+    }
   };
 
-  const handleRecordPayment = (paymentId: string, method: PaymentMethod, receivedBy?: string) => {
+  const handleRecordPayment = async (paymentId: string, method: PaymentMethod, receivedBy?: string) => {
     const payment = payments.find(p => p.id === paymentId && p.hostelId === activeHostelId);
     if (!payment) return;
 
     // 1. Update payment status to Paid (Rent only)
-    setPayments(prev => prev.map(p => {
-      if (p.id === paymentId && p.hostelId === activeHostelId) {
-        return {
-          ...p,
-          status: 'Paid',
-          paidDate: new Date().toISOString().split('T')[0],
-          paymentMethod: method,
-          receivedBy: receivedBy
-        };
-      }
-      return p;
-    }));
+    const updatedPayment = {
+      ...payment,
+      status: 'Paid' as const,
+      paidDate: new Date().toISOString().split('T')[0],
+      paymentMethod: method,
+      receivedBy: receivedBy
+    };
+    await dbEditPayment(updatedPayment);
 
     // 2. Decrease outstandingFees on the resident profile by the rent amount only
     const rentAmount = payment.amount - (payment.busAmount || 0);
-    setResidents(prev => prev.map(res => {
-      if (res.id === payment.residentId && res.hostelId === activeHostelId) {
-        return {
-          ...res,
-          outstandingFees: Math.max(0, res.outstandingFees - rentAmount)
-        };
-      }
-      return res;
-    }));
+    const res = residents.find(r => r.id === payment.residentId && r.hostelId === activeHostelId);
+    if (res) {
+      const updatedResident = {
+        ...res,
+        outstandingFees: Math.max(0, res.outstandingFees - rentAmount)
+      };
+      await dbEditResident(updatedResident);
+    }
   };
 
-  const handleRecordBusPayment = (paymentId: string, method: PaymentMethod, receivedBy?: string) => {
+  const handleRecordBusPayment = async (paymentId: string, method: PaymentMethod, receivedBy?: string) => {
     const payment = payments.find(p => p.id === paymentId && p.hostelId === activeHostelId);
     if (!payment) return;
 
     // 1. Update payment busStatus to Paid
-    setPayments(prev => prev.map(p => {
-      if (p.id === paymentId && p.hostelId === activeHostelId) {
-        return {
-          ...p,
-          busStatus: 'Paid',
-          busPaymentMethod: method,
-          busReceivedBy: receivedBy
-        };
-      }
-      return p;
-    }));
+    const updatedPayment = {
+      ...payment,
+      busStatus: 'Paid' as const,
+      busPaymentMethod: method,
+      busReceivedBy: receivedBy
+    };
+    await dbEditPayment(updatedPayment);
 
     // 2. Decrease outstandingFees on the resident profile by the bus amount
     if (payment.busStatus === 'Pending' && payment.busAmount) {
-      setResidents(prev => prev.map(res => {
-        if (res.id === payment.residentId && res.hostelId === activeHostelId) {
-          return {
-            ...res,
-            outstandingFees: Math.max(0, res.outstandingFees - (payment.busAmount || 0))
-          };
-        }
-        return res;
-      }));
+      const res = residents.find(r => r.id === payment.residentId && r.hostelId === activeHostelId);
+      if (res) {
+        const updatedResident = {
+          ...res,
+          outstandingFees: Math.max(0, res.outstandingFees - payment.busAmount)
+        };
+        await dbEditResident(updatedResident);
+      }
     }
   };
 
-  const handleDeletePayment = (paymentId: string) => {
+  const handleDeletePayment = async (paymentId: string) => {
     const payment = payments.find(p => p.id === paymentId && p.hostelId === activeHostelId);
     if (!payment) return;
 
     // If payment was pending, decrease the resident's outstanding balance
     if (payment.status === 'Pending') {
-      setResidents(prev => prev.map(res => {
-        if (res.id === payment.residentId && res.hostelId === activeHostelId) {
-          return {
-            ...res,
-            outstandingFees: Math.max(0, res.outstandingFees - payment.amount)
-          };
-        }
-        return res;
-      }));
+      const res = residents.find(r => r.id === payment.residentId && r.hostelId === activeHostelId);
+      if (res) {
+        const updatedResident = {
+          ...res,
+          outstandingFees: Math.max(0, res.outstandingFees - payment.amount)
+        };
+        await dbEditResident(updatedResident);
+      }
     }
 
-    setPayments(prev => prev.filter(p => !(p.id === paymentId && p.hostelId === activeHostelId)));
+    await dbDeletePayment(paymentId);
   };
 
-  const handleGenerateInvoices = (month: string, dueDate: string) => {
+  const handleGenerateInvoices = async (month: string, dueDate: string) => {
     const activeWithRooms = residents.filter(r => r.status === 'Active' && r.roomId && r.hostelId === activeHostelId);
-    const generatedInvoices: Payment[] = [];
-    const billedResidentIds: { [id: string]: number } = {};
-
-    activeWithRooms.forEach(res => {
+    
+    for (const res of activeWithRooms) {
       // Avoid duplicating invoice for the same person in the same month
       const alreadyHas = payments.some(p => p.residentId === res.id && p.month === month && p.hostelId === activeHostelId);
       if (!alreadyHas && res.roomId) {
@@ -563,7 +656,7 @@ export default function App() {
 
           const totalAmount = rentAmount + busFeeAmount;
 
-          generatedInvoices.push({
+          const newInvoice: Payment = {
             id: `pay-gen-${Date.now()}-${res.id}`,
             hostelId: activeHostelId,
             residentId: res.id,
@@ -579,55 +672,49 @@ export default function App() {
             busStatus: res.busOption ? 'Pending' : 'Not Subscribed',
             busPaymentMethod: null,
             busReceivedBy: undefined
-          });
-          billedResidentIds[res.id] = totalAmount;
+          };
+
+          await dbAddPayment(newInvoice);
+
+          const updatedResident = {
+            ...res,
+            outstandingFees: res.outstandingFees + totalAmount
+          };
+          await dbEditResident(updatedResident);
         }
       }
-    });
-
-    if (generatedInvoices.length > 0) {
-      setPayments(prev => [...prev, ...generatedInvoices]);
-      
-      // Batched update of residents' outstanding dues to avoid concurrent state closure bugs
-      setResidents(prev => prev.map(r => {
-        if (billedResidentIds[r.id] !== undefined && r.hostelId === activeHostelId) {
-          return {
-            ...r,
-            outstandingFees: r.outstandingFees + billedResidentIds[r.id]
-          };
-        }
-        return r;
-      }));
     }
   };
 
-  const handleAddComplaint = (newComplaint: Complaint) => {
+  const handleAddComplaint = async (newComplaint: Complaint) => {
     const complaintWithHostel: Complaint = {
       ...newComplaint,
       hostelId: newComplaint.hostelId || activeHostelId
     };
-    setComplaints(prev => [complaintWithHostel, ...prev]);
+    await dbAddComplaint(complaintWithHostel);
   };
 
-  const handleUpdateComplaintStatus = (complaintId: string, status: ComplaintStatus) => {
-    setComplaints(prev => prev.map(c => {
-      if (c.id === complaintId && c.hostelId === activeHostelId) {
-        return {
-          ...c,
-          status,
-          resolvedAt: status === 'Resolved' ? new Date().toISOString() : null
-        };
-      }
-      return c;
-    }));
+  const handleUpdateComplaintStatus = async (complaintId: string, status: ComplaintStatus) => {
+    const complaint = complaints.find(c => c.id === complaintId && c.hostelId === activeHostelId);
+    if (complaint) {
+      const updatedComplaint = {
+        ...complaint,
+        status,
+        resolvedAt: status === 'Resolved' ? new Date().toISOString() : null
+      };
+      await dbEditComplaint(updatedComplaint);
+    }
   };
 
-  const handleDeleteComplaint = (complaintId: string) => {
-    setComplaints(prev => prev.filter(c => !(c.id === complaintId && c.hostelId === activeHostelId)));
+  const handleDeleteComplaint = async (complaintId: string) => {
+    await dbDeleteComplaint(complaintId);
   };
 
-  const handleClearResolvedComplaints = () => {
-    setComplaints(prev => prev.filter(c => !(c.status === 'Resolved' && c.hostelId === activeHostelId)));
+  const handleClearResolvedComplaints = async () => {
+    const resolved = complaints.filter(c => c.status === 'Resolved' && c.hostelId === activeHostelId);
+    for (const c of resolved) {
+      await dbDeleteComplaint(c.id);
+    }
   };
 
   // Open profile drawer directly
@@ -636,17 +723,17 @@ export default function App() {
     setView('residents');
   };
 
-  const handleAddExpense = (newExpense: Omit<Expense, 'id' | 'hostelId'>) => {
+  const handleAddExpense = async (newExpense: Omit<Expense, 'id' | 'hostelId'>) => {
     const expense: Expense = {
       ...newExpense,
       id: `exp-${Date.now()}`,
       hostelId: activeHostelId
     };
-    setExpenses(prev => [expense, ...prev]);
+    await dbAddExpense(expense);
   };
 
-  const handleDeleteExpense = (expenseId: string) => {
-    setExpenses(prev => prev.filter(e => e.id !== expenseId));
+  const handleDeleteExpense = async (expenseId: string) => {
+    await dbDeleteExpense(expenseId);
   };
 
   const sidebarTabs = [
