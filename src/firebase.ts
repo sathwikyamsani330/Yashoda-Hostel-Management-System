@@ -1,13 +1,13 @@
 import { initializeApp } from 'firebase/app';
-import { 
-  getFirestore, 
-  doc, 
-  setDoc, 
-  deleteDoc, 
-  collection, 
-  getDocs, 
-  query, 
-  limit 
+import {
+  getFirestore,
+  doc,
+  setDoc,
+  deleteDoc,
+  collection,
+  getDocs,
+  query,
+  limit
 } from 'firebase/firestore';
 import { Room, Resident, Payment, Complaint, Expense } from './types';
 
@@ -42,7 +42,7 @@ export const seedDatabaseIfEmpty = async (
     const snapshot = await getDocs(q);
     if (snapshot.empty) {
       console.log('Firestore is empty. Seeding initial data...');
-      
+
       // Seed Rooms (Document ID uses hostelId_roomId to avoid duplicates)
       for (const room of initialRooms) {
         await setDoc(doc(db, 'rooms', `${room.hostelId || '1'}_${room.id}`), room);
@@ -67,7 +67,7 @@ export const seedDatabaseIfEmpty = async (
       for (const expense of initialExpenses) {
         await setDoc(doc(db, 'expenses', expense.id), expense);
       }
-      
+
       console.log('Database seeded successfully.');
     }
   } catch (error) {
