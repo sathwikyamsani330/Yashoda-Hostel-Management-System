@@ -1,5 +1,8 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApp, getApps } from 'firebase/app';
 import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   getFirestore,
   doc,
   setDoc,
@@ -11,22 +14,77 @@ import {
 } from 'firebase/firestore';
 import { Room, Resident, Payment, Complaint, Expense } from './types';
 
-// Web app's Firebase configuration (using Vite environment variables or fallback values)
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "mock-api-key",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "mock-project.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "mock-project",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "mock-project.appspot.com",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "123456789",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:123456789:web:abcdef",
+// Helper to retrieve the current active configuration
+export const getActiveFirebaseConfig = () => {
+  try {
+    const saved = localStorage.getItem('yashoda_firebase_config');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed.projectId && parsed.apiKey) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error("Failed to parse firebase config from localStorage", e);
+  }
+  
+  return {
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "",
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "",
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "",
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "",
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
+    appId: import.meta.env.VITE_FIREBASE_APP_ID || "",
+  };
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+const activeConfig = getActiveFirebaseConfig();
 
 // Helper to determine if we are using the fallback mock configuration
-export const isMockFirebase = !import.meta.env.VITE_FIREBASE_API_KEY || import.meta.env.VITE_FIREBASE_API_KEY === "mock-api-key";
+export const isMockFirebase = !activeConfig.projectId || !activeConfig.apiKey || activeConfig.apiKey === "mock-api-key";
+
+const finalFirebaseConfig = isMockFirebase ? {
+  apiKey: "mock-api-key",
+  authDomain: "mock-project.firebaseapp.com",
+  projectId: "mock-project",
+  storageBucket: "mock-project.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abcdef",
+} : activeConfig;
+
+// Initialize Firebase App
+let app;
+try {
+  if (getApps().length === 0) {
+    app = initializeApp(finalFirebaseConfig);
+  } else {
+    app = getApp();
+  }
+} catch (error) {
+  console.error("Firebase App initialization failed, falling back to mock:", error);
+  const mockConfig = {
+    apiKey: "mock-api-key",
+    authDomain: "mock-project.firebaseapp.com",
+    projectId: "mock-project",
+    storageBucket: "mock-project.appspot.com",
+    messagingSenderId: "123456789",
+    appId: "1:123456789:web:abcdef",
+  };
+  app = initializeApp(mockConfig);
+}
+
+// Initialize Firestore with persistent caching
+export let db: any;
+try {
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager()
+    })
+  });
+} catch (error) {
+  console.error("Firestore persistence initialization failed. Falling back to default firestore.", error);
+  db = getFirestore(app);
+}
 
 
 // Seeding function: Populate Firestore collections if they are empty

@@ -51,6 +51,7 @@ import ResidentManager from './components/ResidentManager';
 import PaymentTracker from './components/PaymentTracker';
 import MaintenanceHelpdesk from './components/MaintenanceHelpdesk';
 import StudentPortal from './components/StudentPortal';
+import DatabaseSettingsModal from './components/DatabaseSettingsModal';
 import { Lock, Eye, EyeOff, LogOut, ArrowRight } from 'lucide-react';
 
 export default function App() {
@@ -70,6 +71,7 @@ export default function App() {
   });
   const [isAllDataLoaded, setIsAllDataLoaded] = useState(false);
   const schedulerHasRun = useRef(false);
+  const [isDbSettingsOpen, setIsDbSettingsOpen] = useState(false);
 
   // 1. Seed database on load
   useEffect(() => {
@@ -939,7 +941,16 @@ export default function App() {
       {isMockFirebase && (
         <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 text-center text-xs text-amber-800 font-medium flex items-center justify-center gap-2">
           <AlertTriangle className="w-4 h-4 text-amber-600 animate-pulse shrink-0" />
-          <span><strong>Running in Mock Mode:</strong> Real-time database synchronization is disabled. Please configure your Firebase environment variables in Vercel settings and locally in `.env` to synchronize data across devices.</span>
+          <span>
+            <strong>Running in Mock Mode:</strong> Real-time database synchronization is disabled. 
+            Please configure your Firebase credentials to enable sync across devices.
+            <button
+              onClick={() => setIsDbSettingsOpen(true)}
+              className="ml-1.5 underline hover:text-amber-955 hover:text-indigo-855 text-indigo-600 font-bold cursor-pointer"
+            >
+              Configure Firebase Sync
+            </button>
+          </span>
         </div>
       )}
       <div className="flex flex-row flex-1 min-h-0">
@@ -1034,16 +1045,26 @@ export default function App() {
         </nav>
 
         {/* Info Box Footer */}
-        <div className="p-4 m-4 bg-gray-50 border border-gray-200 rounded-2xl space-y-2 text-xs">
+        <div className="p-4 m-4 bg-gray-50 border border-gray-200 rounded-2xl space-y-2.5 text-xs">
           <div className={`flex items-center gap-2 ${isMockFirebase ? 'text-amber-600' : 'text-emerald-600'}`}>
-            {isMockFirebase ? <AlertTriangle className="w-3.5 h-3.5" /> : <Sparkles className="w-3.5 h-3.5" />}
+            {isMockFirebase ? <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> : <Sparkles className="w-3.5 h-3.5 shrink-0" />}
             <span className="font-semibold">{isMockFirebase ? 'Mock Database Active' : 'Firebase Synced'}</span>
           </div>
           <p className="text-gray-500 leading-normal text-2xs">
             {isMockFirebase 
-              ? 'Real-time synchronization across devices is disabled. Set VITE_FIREBASE_* environment variables to enable it.' 
+              ? 'Real-time synchronization across devices is disabled. Click below to configure your Firebase connection.' 
               : 'Every check-in, payment, and complaint is instantly synchronized in real time across all connected devices.'}
           </p>
+          <button
+            onClick={() => setIsDbSettingsOpen(true)}
+            className={`w-full py-1.5 px-3 rounded-xl text-2xs font-bold border transition-all cursor-pointer ${
+              isMockFirebase 
+                ? 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100 active:scale-[0.98]'
+                : 'bg-emerald-50 border-emerald-250 text-emerald-700 hover:bg-emerald-100 active:scale-[0.98]'
+            }`}
+          >
+            {isMockFirebase ? 'Set Up Firebase Sync' : 'Update Firebase Config'}
+          </button>
         </div>
 
         {/* Admin Logout Button */}
@@ -1168,14 +1189,28 @@ export default function App() {
                 })}
               </nav>
 
-              <div className="p-4 border-t border-gray-100 text-center text-3xs text-gray-400 space-y-3">
+              <div className="p-4 border-t border-gray-100 text-center text-3xs text-gray-400 space-y-2">
                 <span>{HOSTEL_NAMES[activeHostelId]}</span>
+                <button
+                  onClick={() => {
+                    setIsSidebarOpen(false);
+                    setIsDbSettingsOpen(true);
+                  }}
+                  className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                    isMockFirebase 
+                      ? 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
+                      : 'bg-emerald-50 border-emerald-250 text-emerald-700 hover:bg-emerald-100'
+                  }`}
+                >
+                  {isMockFirebase ? <AlertTriangle className="w-3.5 h-3.5" /> : <Sparkles className="w-3.5 h-3.5" />}
+                  <span>{isMockFirebase ? 'Set Up Firebase Sync' : 'Database Status: Connected'}</span>
+                </button>
                 <button
                   onClick={() => {
                     setIsSidebarOpen(false);
                     handleAdminLogout();
                   }}
-                  className="w-full flex items-center justify-center gap-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold py-2.5 rounded-xl transition-all cursor-pointer border border-rose-100 mt-2"
+                  className="w-full flex items-center justify-center gap-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold py-2.5 rounded-xl transition-all cursor-pointer border border-rose-100 mt-1"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   <span>Sign Out</span>
@@ -1381,6 +1416,8 @@ export default function App() {
             </motion.div>
           </AnimatePresence>
         </main>
+
+        <DatabaseSettingsModal isOpen={isDbSettingsOpen} onClose={() => setIsDbSettingsOpen(false)} />
       </div>
       </div>
     </div>
