@@ -25,6 +25,10 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 
+// Helper to determine if we are using the fallback mock configuration
+export const isMockFirebase = !import.meta.env.VITE_FIREBASE_API_KEY || import.meta.env.VITE_FIREBASE_API_KEY === "mock-api-key";
+
+
 // Seeding function: Populate Firestore collections if they are empty
 export const seedDatabaseIfEmpty = async (
   initialRooms: Room[],

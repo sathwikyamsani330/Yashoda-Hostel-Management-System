@@ -39,7 +39,8 @@ import {
   dbEditComplaint, 
   dbDeleteComplaint, 
   dbAddExpense, 
-  dbDeleteExpense 
+  dbDeleteExpense,
+  isMockFirebase
 } from './firebase';
 import { INITIAL_ROOMS, INITIAL_RESIDENTS, INITIAL_PAYMENTS, INITIAL_COMPLAINTS, INITIAL_EXPENSES } from './data';
 
@@ -934,7 +935,14 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex font-sans text-gray-800" id="hostel-portal-root">
+    <div className="min-h-screen bg-gray-50 flex flex-col font-sans text-gray-800" id="hostel-portal-root">
+      {isMockFirebase && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 text-center text-xs text-amber-800 font-medium flex items-center justify-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-amber-600 animate-pulse shrink-0" />
+          <span><strong>Running in Mock Mode:</strong> Real-time database synchronization is disabled. Please configure your Firebase environment variables in Vercel settings and locally in `.env` to synchronize data across devices.</span>
+        </div>
+      )}
+      <div className="flex flex-row flex-1 min-h-0">
       
       {/* LEFT SIDEBAR - Desktop */}
       <aside className="hidden lg:flex flex-col w-64 bg-white text-slate-800 shrink-0 border-r border-gray-200 sticky top-0 h-screen">
@@ -1027,12 +1035,14 @@ export default function App() {
 
         {/* Info Box Footer */}
         <div className="p-4 m-4 bg-gray-50 border border-gray-200 rounded-2xl space-y-2 text-xs">
-          <div className="flex items-center gap-2 text-indigo-600">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span className="font-semibold">Local Storage Saved</span>
+          <div className={`flex items-center gap-2 ${isMockFirebase ? 'text-amber-600' : 'text-emerald-600'}`}>
+            {isMockFirebase ? <AlertTriangle className="w-3.5 h-3.5" /> : <Sparkles className="w-3.5 h-3.5" />}
+            <span className="font-semibold">{isMockFirebase ? 'Mock Database Active' : 'Firebase Synced'}</span>
           </div>
           <p className="text-gray-500 leading-normal text-2xs">
-            Any modification, check-in, billing, or resolution updates immediately persist inside your browser cache safely.
+            {isMockFirebase 
+              ? 'Real-time synchronization across devices is disabled. Set VITE_FIREBASE_* environment variables to enable it.' 
+              : 'Every check-in, payment, and complaint is instantly synchronized in real time across all connected devices.'}
           </p>
         </div>
 
@@ -1372,7 +1382,7 @@ export default function App() {
           </AnimatePresence>
         </main>
       </div>
-
+      </div>
     </div>
   );
 }
