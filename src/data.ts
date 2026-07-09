@@ -172,6 +172,7 @@ export const INITIAL_RESIDENTS: Resident[] = [
       relation: 'Sister',
       phone: '+1 (555) 345-6780'
     },
+    aadhaarNumber: '7777 8888 9999',
     busOption: true
   },
   {
@@ -189,7 +190,8 @@ export const INITIAL_RESIDENTS: Resident[] = [
       name: 'David Davis',
       relation: 'Father',
       phone: '+1 (555) 456-7891'
-    }
+    },
+    aadhaarNumber: '1212 3434 5656'
   },
   {
     id: 'res-5',
@@ -206,7 +208,8 @@ export const INITIAL_RESIDENTS: Resident[] = [
       name: 'Patricia Brown',
       relation: 'Mother',
       phone: '+1 (555) 567-8902'
-    }
+    },
+    aadhaarNumber: '7878 9090 1212'
   },
 
   // Hostel 2 (Yashoda-2 Deluxe Boys Hostel)
@@ -225,7 +228,8 @@ export const INITIAL_RESIDENTS: Resident[] = [
       name: 'Thomas Mercer',
       relation: 'Father',
       phone: '+1 (555) 789-0120'
-    }
+    },
+    aadhaarNumber: '3434 5656 7878'
   },
   {
     id: 'res-11',
@@ -242,7 +246,8 @@ export const INITIAL_RESIDENTS: Resident[] = [
       name: 'Susan Miller',
       relation: 'Mother',
       phone: '+1 (555) 890-1230'
-    }
+    },
+    aadhaarNumber: '9090 1212 3434'
   }
 ];
 

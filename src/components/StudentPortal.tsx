@@ -109,35 +109,16 @@ export default function StudentPortal({
         studentId = selectedRes.id;
 
         // Perform Aadhaar Verification
-        if (!aadhaarVerification || aadhaarVerification.trim().length !== 4) {
-          setErrorMsg('🔒 Authentication Required: Please enter the last 4 digits of your registered Aadhaar number to verify your identity.');
+        const enteredLast4Digits = aadhaarVerification.trim();
+        const resident = {
+          ...selectedRes,
+          aadhaarLast4: selectedRes.aadhaarNumber ? selectedRes.aadhaarNumber.replace(/\D/g, '').slice(-4) : ''
+        };
+
+        if (enteredLast4Digits !== resident.aadhaarLast4) {
+          alert("Authentication failed. Last 4 Aadhaar digits do not match.");
+          setErrorMsg("Authentication failed. Last 4 Aadhaar digits do not match.");
           return;
-        }
-
-        const cleanStoredAadhaar = selectedRes.aadhaarNumber ? selectedRes.aadhaarNumber.replace(/\D/g, '') : '';
-        const enteredDigits = aadhaarVerification.trim().replace(/\D/g, '');
-
-        if (enteredDigits.length !== 4) {
-          setErrorMsg('❌ Authentication Error: The verification code must be exactly 4 digits.');
-          return;
-        }
-
-        if (cleanStoredAadhaar.length >= 4) {
-          const expectedLastFour = cleanStoredAadhaar.slice(-4);
-          if (enteredDigits !== expectedLastFour) {
-            setErrorMsg(`❌ Identity Verification Failed! The entered 4 digits do not match the registered Aadhaar records for ${selectedRes.name}. Enter the correct last 4 digits to submit.`);
-            return;
-          }
-        } else {
-          // If the profile has no Aadhaar, fallback to Phone verification
-          const cleanPhone = selectedRes.phone ? selectedRes.phone.replace(/\D/g, '') : '';
-          const expectedLastFourPhone = cleanPhone.slice(-4);
-          if (expectedLastFourPhone.length >= 4) {
-            if (enteredDigits !== expectedLastFourPhone) {
-              setErrorMsg(`❌ Identity Verification Failed! Profile is missing Aadhaar. Verified via registered Phone ending in ...${expectedLastFourPhone}, but the digits did not match. Please verify using the last 4 digits of your registered Phone Number.`);
-              return;
-            }
-          }
         }
       } else {
         setErrorMsg('Selected resident not found.');
