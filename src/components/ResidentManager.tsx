@@ -22,7 +22,7 @@ import {
   CheckCircle
 } from 'lucide-react';
 import { Resident, Room, Payment, Complaint } from '../types';
-import { formatCurrency, formatDate } from '../utils';
+import { formatCurrency, formatDate, getBillingAmounts } from '../utils';
 
 interface ResidentManagerProps {
   residents: Resident[];
@@ -37,6 +37,7 @@ interface ResidentManagerProps {
   onSelectResidentId: string | null;
   onClearSelectResident: () => void;
   setView: (view: 'dashboard' | 'rooms' | 'residents' | 'payments' | 'maintenance') => void;
+  activeHostelId?: '1' | '2';
 }
 
 export default function ResidentManager({ 
@@ -51,7 +52,8 @@ export default function ResidentManager({
   onClearActiveCheckins,
   onSelectResidentId,
   onClearSelectResident,
-  setView
+  setView,
+  activeHostelId = '1'
 }: ResidentManagerProps) {
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -732,44 +734,42 @@ Thank you!
                   </div>
 
                   {/* Calculated Fees Preview */}
-                  <div className="p-3.5 bg-gray-50 border border-gray-150 rounded-xl space-y-1">
-                    <span className="text-3xs text-gray-400 font-bold uppercase tracking-wider block">Estimated Billing Preview</span>
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-gray-500">
-                        {formSharingType === 'Other' ? 'Room Base Rent' : `${formSharingType} Rent (${formPaymentPlan})`}:
-                      </span>
-                      <span className="font-semibold text-gray-900 font-mono">
-                        {formatCurrency(
-                          formSharingType === '3 Sharing'
-                            ? (formPaymentPlan === '6 Months' ? 45000 : 9000)
-                            : formSharingType === '4 Sharing'
-                            ? (formPaymentPlan === '6 Months' ? 40000 : 7500)
-                            : (rooms.find(r => r.id === formRoomId)?.rent || 0)
+                  {(() => {
+                    const billing = getBillingAmounts(
+                      activeHostelId,
+                      formSharingType,
+                      formPaymentPlan,
+                      formBusOption,
+                      rooms.find(r => r.id === formRoomId)?.rent || 0
+                    );
+                    return (
+                      <div className="p-3.5 bg-gray-50 border border-gray-150 rounded-xl space-y-1">
+                        <span className="text-3xs text-gray-400 font-bold uppercase tracking-wider block">Estimated Billing Preview</span>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-gray-500">
+                            {formSharingType === 'Other' ? 'Room Base Rent' : `${formSharingType} Rent (${formPaymentPlan})`}:
+                          </span>
+                          <span className="font-semibold text-gray-900 font-mono">
+                            {formatCurrency(billing.rentAmount)}
+                          </span>
+                        </div>
+                        {formBusOption && (
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-gray-500">Bus Subscription Fee:</span>
+                            <span className="font-semibold text-gray-900 font-mono">
+                              {formatCurrency(billing.busFeeAmount)}
+                            </span>
+                          </div>
                         )}
-                      </span>
-                    </div>
-                    {formBusOption && (
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="text-gray-500">Bus Subscription Fee:</span>
-                        <span className="font-semibold text-gray-900 font-mono">
-                          {formatCurrency(formPaymentPlan === '6 Months' ? 6000 : 1000)}
-                        </span>
+                        <div className="border-t border-gray-200/60 pt-1.5 flex justify-between items-center text-xs font-bold text-indigo-750">
+                          <span>Total Initial Invoice:</span>
+                          <span className="font-mono text-sm text-indigo-900">
+                            {formatCurrency(billing.totalAmount)}
+                          </span>
+                        </div>
                       </div>
-                    )}
-                    <div className="border-t border-gray-200/60 pt-1.5 flex justify-between items-center text-xs font-bold text-indigo-750">
-                      <span>Total Initial Invoice:</span>
-                      <span className="font-mono text-sm text-indigo-900">
-                        {formatCurrency(
-                          (formSharingType === '3 Sharing'
-                            ? (formPaymentPlan === '6 Months' ? 45000 : 9000)
-                            : formSharingType === '4 Sharing'
-                            ? (formPaymentPlan === '6 Months' ? 40000 : 7500)
-                            : (rooms.find(r => r.id === formRoomId)?.rent || 0)) + 
-                          (formBusOption ? (formPaymentPlan === '6 Months' ? 6000 : 1000) : 0)
-                        )}
-                      </span>
-                    </div>
-                  </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Section 4: Emergency Link */}
@@ -952,7 +952,9 @@ Thank you!
                             ? 'text-emerald-700 bg-emerald-50 border border-emerald-100' 
                             : 'text-gray-400 bg-gray-50 border border-gray-100'
                         }`}>
-                          {activeDetailResident.busOption ? 'Subscribed (₹6,000 / 6-mo)' : 'Not Subscribed'}
+                          {activeDetailResident.busOption 
+                            ? (activeDetailResident.paymentPlan === '6 Months' ? 'Subscribed (₹6,000 / 6-mo)' : 'Subscribed (₹1,000 / mo)') 
+                            : 'Not Subscribed'}
                         </span>
                       </div>
                     </div>

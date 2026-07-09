@@ -26,8 +26,8 @@ interface PaymentTrackerProps {
   payments: Payment[];
   residents: Resident[];
   rooms: Room[];
-  onRecordPayment: (paymentId: string, method: PaymentMethod, receivedBy?: string) => void;
-  onRecordBusPayment?: (paymentId: string, method: PaymentMethod, receivedBy?: string) => void;
+  onRecordPayment: (paymentId: string, method: PaymentMethod, receivedBy?: string, collectedAmount?: number) => void;
+  onRecordBusPayment?: (paymentId: string, method: PaymentMethod, receivedBy?: string, collectedAmount?: number) => void;
   onGenerateInvoices: (month: string, dueDate: string) => void;
   onDeletePayment: (paymentId: string) => void;
   onClearCompletedInvoices: () => void;
@@ -86,6 +86,8 @@ export default function PaymentTracker({
   const [billingError, setBillingError] = useState('');
   const [billingSuccess, setBillingSuccess] = useState('');
   const [forceProceed, setForceProceed] = useState(false);
+  const [formRentAmount, setFormRentAmount] = useState<number>(0);
+  const [formBusAmount, setFormBusAmount] = useState<number>(0);
 
   // Extract all distinct months in payments for filters
   const distinctMonths = Array.from(new Set(payments.map(p => p.month)));
@@ -206,6 +208,7 @@ export default function PaymentTracker({
     setActivePayment(payment);
     setPaymentMethod('UPI');
     setReceivedBy('Hostel Warden');
+    setFormRentAmount(payment.amount - (payment.busAmount || 0));
     setIsPayOpen(true);
   };
 
@@ -213,7 +216,7 @@ export default function PaymentTracker({
     e.preventDefault();
     if (!activePayment) return;
 
-    onRecordPayment(activePayment.id, paymentMethod, receivedBy.trim());
+    onRecordPayment(activePayment.id, paymentMethod, receivedBy.trim(), formRentAmount);
     setIsPayOpen(false);
     setActivePayment(null);
   };
@@ -222,6 +225,7 @@ export default function PaymentTracker({
     setActiveBusPayment(payment);
     setBusPaymentMethod('UPI');
     setBusReceivedBy('Hostel Warden');
+    setFormBusAmount(payment.busAmount || 0);
     setIsBusPayOpen(true);
   };
 
@@ -230,7 +234,7 @@ export default function PaymentTracker({
     if (!activeBusPayment) return;
 
     if (onRecordBusPayment) {
-      onRecordBusPayment(activeBusPayment.id, busPaymentMethod, busReceivedBy.trim());
+      onRecordBusPayment(activeBusPayment.id, busPaymentMethod, busReceivedBy.trim(), formBusAmount);
     }
     setIsBusPayOpen(false);
     setActiveBusPayment(null);
@@ -864,11 +868,16 @@ Thank you!
                   <div className="p-3 bg-indigo-600 text-white rounded-xl">
                     <DollarSign className="w-5 h-5" />
                   </div>
-                  <div>
-                    <span className="text-indigo-800 text-2xs uppercase block">Rent Amount Due</span>
-                    <span className="text-2xl font-bold text-indigo-950">
-                      {formatCurrency(activePayment.amount - (activePayment.busAmount || 0))}
-                    </span>
+                  <div className="flex-1">
+                    <label className="text-indigo-850 text-2xs font-semibold uppercase block mb-1">Rent Amount Collected (₹)</label>
+                    <input
+                      type="number"
+                      value={formRentAmount}
+                      onChange={(e) => setFormRentAmount(Number(e.target.value))}
+                      className="text-2xl font-bold text-indigo-950 bg-white/70 border border-indigo-250 rounded-lg px-2 py-0.5 w-full focus:outline-none focus:border-indigo-500 font-mono"
+                      required
+                      min="0"
+                    />
                   </div>
                 </div>
 
@@ -990,9 +999,16 @@ Thank you!
                   <div className="p-3 bg-emerald-600 text-white rounded-xl">
                     <Bus className="w-5 h-5" />
                   </div>
-                  <div>
-                    <span className="text-emerald-800 text-2xs uppercase block font-semibold">Bus Fee Due</span>
-                    <span className="text-2xl font-bold text-emerald-950">{formatCurrency(activeBusPayment.busAmount || 0)}</span>
+                  <div className="flex-1">
+                    <label className="text-emerald-850 text-2xs font-semibold uppercase block mb-1">Bus Fee Collected (₹)</label>
+                    <input
+                      type="number"
+                      value={formBusAmount}
+                      onChange={(e) => setFormBusAmount(Number(e.target.value))}
+                      className="text-2xl font-bold text-emerald-950 bg-white/70 border border-emerald-250 rounded-lg px-2 py-0.5 w-full focus:outline-none focus:border-emerald-500 font-mono"
+                      required
+                      min="0"
+                    />
                   </div>
                 </div>
 

@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 
 import { Room, Resident, Payment, Complaint, PaymentMethod, ComplaintStatus, Expense } from './types';
-import { loadState, saveState, formatCurrency } from './utils';
+import { loadState, saveState, formatCurrency, getBillingAmounts } from './utils';
 
 // Firebase imports
 import { collection, onSnapshot } from 'firebase/firestore';
@@ -279,22 +279,8 @@ export default function App() {
 
   // Helper to compute resident rent and bus fees based on payment plan & sharing type
   const getResidentBillingAmounts = (res: Resident, room: Room | undefined) => {
-    let rentAmount = room ? room.rent : 450;
-    let busFeeAmount = 0;
-
-    if (res.sharingType === '3 Sharing') {
-      rentAmount = res.paymentPlan === '6 Months' ? 45000 : 9000;
-    } else if (res.sharingType === '4 Sharing') {
-      rentAmount = res.paymentPlan === '6 Months' ? 40000 : 7500;
-    } else if (room) {
-      rentAmount = res.paymentPlan === '6 Months' ? room.rent * 6 : room.rent;
-    }
-
-    if (res.busOption) {
-      busFeeAmount = res.paymentPlan === '6 Months' ? 6000 : 1000;
-    }
-
-    return { rentAmount, busFeeAmount, totalAmount: rentAmount + busFeeAmount };
+    const hostelId = res.hostelId || activeHostelId || '1';
+    return getBillingAmounts(hostelId, res.sharingType, res.paymentPlan, res.busOption, room?.rent || 0);
   };
 
   // Scheduler running once data is loaded from Firestore
@@ -464,20 +450,13 @@ export default function App() {
       };
 
       // 3. Generate initial pending rent invoice for this resident
-      let rentAmount = room.rent;
-      let busFeeAmount = 0;
-
-      if (newResident.sharingType === '3 Sharing') {
-        rentAmount = newResident.paymentPlan === '6 Months' ? 45000 : 9000;
-      } else if (newResident.sharingType === '4 Sharing') {
-        rentAmount = newResident.paymentPlan === '6 Months' ? 40000 : 7500;
-      }
-
-      if (newResident.busOption) {
-        busFeeAmount = newResident.paymentPlan === '6 Months' ? 6000 : 1000;
-      }
-
-      const totalAmount = rentAmount + busFeeAmount;
+      const { rentAmount, busFeeAmount, totalAmount } = getBillingAmounts(
+        activeHostelId,
+        newResident.sharingType,
+        newResident.paymentPlan,
+        newResident.busOption,
+        room.rent
+      );
 
       const initialPayment: Payment = {
         id: `pay-gen-${Date.now()}`,
@@ -578,52 +557,62 @@ export default function App() {
     }
   };
 
-  const handleRecordPayment = async (paymentId: string, method: PaymentMethod, receivedBy?: string) => {
+  const handleRecordPayment = async (paymentId: string, method: PaymentMethod, receivedBy?: string, collectedAmount?: number) => {
     const payment = payments.find(p => p.id === paymentId && p.hostelId === activeHostelId);
     if (!payment) return;
 
-    // 1. Update payment status to Paid (Rent only)
+    const oldBusAmount = payment.busAmount || 0;
+    const oldRentAmount = payment.amount - oldBusAmount;
+    const rentAmount = collectedAmount !== undefined ? collectedAmount : oldRentAmount;
+
+    // 1. Update payment status to Paid (Rent only) and update total amount
     const updatedPayment = {
       ...payment,
       status: 'Paid' as const,
       paidDate: new Date().toISOString().split('T')[0],
       paymentMethod: method,
-      receivedBy: receivedBy ?? null
+      receivedBy: receivedBy ?? null,
+      amount: rentAmount + oldBusAmount
     };
     await dbEditPayment(updatedPayment);
 
     // 2. Decrease outstandingFees on the resident profile by the rent amount only
-    const rentAmount = payment.amount - (payment.busAmount || 0);
     const res = residents.find(r => r.id === payment.residentId && r.hostelId === activeHostelId);
     if (res) {
       const updatedResident = {
         ...res,
-        outstandingFees: Math.max(0, res.outstandingFees - rentAmount)
+        outstandingFees: Math.max(0, res.outstandingFees - oldRentAmount)
       };
       await dbEditResident(updatedResident);
     }
   };
 
-  const handleRecordBusPayment = async (paymentId: string, method: PaymentMethod, receivedBy?: string) => {
+  const handleRecordBusPayment = async (paymentId: string, method: PaymentMethod, receivedBy?: string, collectedAmount?: number) => {
     const payment = payments.find(p => p.id === paymentId && p.hostelId === activeHostelId);
     if (!payment) return;
+
+    const oldBusAmount = payment.busAmount || 0;
+    const busAmount = collectedAmount !== undefined ? collectedAmount : oldBusAmount;
+    const rentAmount = payment.amount - oldBusAmount;
 
     // 1. Update payment busStatus to Paid
     const updatedPayment = {
       ...payment,
       busStatus: 'Paid' as const,
       busPaymentMethod: method,
-      busReceivedBy: receivedBy ?? null
+      busReceivedBy: receivedBy ?? null,
+      busAmount: busAmount,
+      amount: rentAmount + busAmount
     };
     await dbEditPayment(updatedPayment);
 
     // 2. Decrease outstandingFees on the resident profile by the bus amount
-    if (payment.busStatus === 'Pending' && payment.busAmount) {
+    if (payment.busStatus === 'Pending' && oldBusAmount) {
       const res = residents.find(r => r.id === payment.residentId && r.hostelId === activeHostelId);
       if (res) {
         const updatedResident = {
           ...res,
-          outstandingFees: Math.max(0, res.outstandingFees - payment.busAmount)
+          outstandingFees: Math.max(0, res.outstandingFees - oldBusAmount)
         };
         await dbEditResident(updatedResident);
       }
@@ -680,20 +669,13 @@ export default function App() {
       if (!alreadyHas && res.roomId) {
         const room = rooms.find(r => r.id === res.roomId && r.hostelId === activeHostelId);
         if (room) {
-          let rentAmount = room.rent;
-          let busFeeAmount = 0;
-
-          if (res.sharingType === '3 Sharing') {
-            rentAmount = res.paymentPlan === '6 Months' ? 45000 : 9000;
-          } else if (res.sharingType === '4 Sharing') {
-            rentAmount = res.paymentPlan === '6 Months' ? 40000 : 7500;
-          }
-
-          if (res.busOption) {
-            busFeeAmount = res.paymentPlan === '6 Months' ? 6000 : 1000;
-          }
-
-          const totalAmount = rentAmount + busFeeAmount;
+          const { rentAmount, busFeeAmount, totalAmount } = getBillingAmounts(
+            activeHostelId,
+            res.sharingType,
+            res.paymentPlan,
+            res.busOption,
+            room.rent
+          );
 
           const newInvoice: Payment = {
             id: `pay-gen-${Date.now()}-${res.id}`,
@@ -1425,6 +1407,7 @@ export default function App() {
                   onSelectResidentId={selectedResidentId}
                   onClearSelectResident={() => setSelectedResidentId(null)}
                   setView={setView}
+                  activeHostelId={activeHostelId}
                 />
               )}
 
