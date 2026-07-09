@@ -77,6 +77,7 @@ try {
 export let db: any;
 try {
   db = initializeFirestore(app, {
+    ignoreUndefinedProperties: true,
     localCache: persistentLocalCache({
       tabManager: persistentMultipleTabManager()
     })

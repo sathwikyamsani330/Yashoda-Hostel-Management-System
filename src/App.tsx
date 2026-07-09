@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-
-const logoImage = '/src/assets/images/peacock_vel_logo_1783414034362.jpg';
+import logoImage from './assets/images/peacock_vel_logo_1783414034362.jpg';
 import { 
   LayoutDashboard, 
   BedDouble, 
@@ -370,7 +369,7 @@ export default function App() {
               busAmount: busFeeAmount,
               busStatus: res.busOption ? 'Pending' : 'Not Subscribed',
               busPaymentMethod: null,
-              busReceivedBy: undefined,
+              busReceivedBy: null,
               amountPaid: 0,
               balance: totalAmount,
               packageType: res.paymentPlan || 'Monthly',
@@ -480,7 +479,7 @@ export default function App() {
         busAmount: busFeeAmount,
         busStatus: newResident.busOption ? 'Pending' : 'Not Subscribed',
         busPaymentMethod: null,
-        busReceivedBy: undefined
+        busReceivedBy: null
       };
 
       // 4. Update the resident's outstanding balance
@@ -574,7 +573,7 @@ export default function App() {
       status: 'Paid' as const,
       paidDate: new Date().toISOString().split('T')[0],
       paymentMethod: method,
-      receivedBy: receivedBy
+      receivedBy: receivedBy ?? null
     };
     await dbEditPayment(updatedPayment);
 
@@ -599,7 +598,7 @@ export default function App() {
       ...payment,
       busStatus: 'Paid' as const,
       busPaymentMethod: method,
-      busReceivedBy: receivedBy
+      busReceivedBy: receivedBy ?? null
     };
     await dbEditPayment(updatedPayment);
 
@@ -674,7 +673,7 @@ export default function App() {
             busAmount: busFeeAmount,
             busStatus: res.busOption ? 'Pending' : 'Not Subscribed',
             busPaymentMethod: null,
-            busReceivedBy: undefined
+            busReceivedBy: null
           };
 
           await dbAddPayment(newInvoice);
