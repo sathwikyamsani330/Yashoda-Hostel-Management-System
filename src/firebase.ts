@@ -27,7 +27,7 @@ export const getActiveFirebaseConfig = () => {
   } catch (e) {
     console.error("Failed to parse firebase config from localStorage", e);
   }
-  
+
   return {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "",
     authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "",
