@@ -322,6 +322,54 @@ service cloud.firestore {
               </div>
             )}
 
+            {/* QR Code Scanner Section */}
+            {config.projectId && config.apiKey && (
+              <div className="bg-slate-50 border border-gray-200 rounded-2xl p-4 mt-4 flex flex-col sm:flex-row items-center gap-4 text-xs text-slate-700">
+                <div className="p-1.5 bg-white border border-gray-150 rounded-xl shrink-0 shadow-2xs">
+                  <img
+                    src={`https://api.qrcode5.com/v1/create?text=${encodeURIComponent(
+                      `${window.location.origin}${window.location.pathname}?db_sync=${btoa(
+                        JSON.stringify({
+                          apiKey: config.apiKey,
+                          authDomain: config.authDomain,
+                          projectId: config.projectId,
+                          storageBucket: config.storageBucket,
+                          messagingSenderId: config.messagingSenderId,
+                          appId: config.appId
+                        })
+                      )}`
+                    )}`}
+                    onError={(e) => {
+                      // Fallback QR code provider if the primary has issues
+                      (e.target as HTMLImageElement).src = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(
+                        `${window.location.origin}${window.location.pathname}?db_sync=${btoa(
+                          JSON.stringify({
+                            apiKey: config.apiKey,
+                            authDomain: config.authDomain,
+                            projectId: config.projectId,
+                            storageBucket: config.storageBucket,
+                            messagingSenderId: config.messagingSenderId,
+                            appId: config.appId
+                          })
+                        )}`
+                      )}`;
+                    }}
+                    alt="Scan to Sync Database"
+                    className="w-[110px] h-[110px] block rounded-lg"
+                  />
+                </div>
+                <div className="text-center sm:text-left">
+                  <p className="font-bold text-gray-950 text-xs mb-1">⚡ Instant Mobile Sync QR Code</p>
+                  <p className="text-2xs text-gray-500 leading-normal mb-2">
+                    Open your phone's camera, scan this QR code, and open the link. Your phone will immediately connect to this same database and automatically synchronize all updates!
+                  </p>
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                    <CheckCircle className="w-3 h-3" /> Real-time active connection
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* Action Buttons */}
             <div className="border-t border-gray-150 pt-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
