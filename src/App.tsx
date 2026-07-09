@@ -634,6 +634,28 @@ export default function App() {
     await dbDeletePayment(paymentId);
   };
 
+  const handleClearCompletedInvoices = async () => {
+    const invoicesToClear = payments.filter(p => {
+      if (p.hostelId !== activeHostelId) return false;
+      const res = residents.find(r => r.id === p.residentId && r.hostelId === activeHostelId);
+      const isPaid = p.status === 'Paid' && (p.busStatus === 'Paid' || p.busStatus === 'Not Subscribed' || !p.busStatus);
+      const isCheckedOutOrOrphan = !res || res.status === 'Checked-Out';
+      return isPaid && isCheckedOutOrOrphan;
+    });
+
+    if (invoicesToClear.length === 0) {
+      alert("No completed or checked-out invoices found to clear.");
+      return;
+    }
+
+    if (window.confirm(`Are you sure you want to permanently delete all ${invoicesToClear.length} paid invoices for checked-out and deleted residents?`)) {
+      for (const p of invoicesToClear) {
+        await dbDeletePayment(p.id);
+      }
+      alert(`Successfully cleared ${invoicesToClear.length} completed invoices.`);
+    }
+  };
+
   const handleGenerateInvoices = async (month: string, dueDate: string) => {
     const activeWithRooms = residents.filter(r => r.status === 'Active' && r.roomId && r.hostelId === activeHostelId);
     
@@ -1399,6 +1421,7 @@ export default function App() {
                   onRecordBusPayment={handleRecordBusPayment}
                   onGenerateInvoices={handleGenerateInvoices}
                   onDeletePayment={handleDeletePayment}
+                  onClearCompletedInvoices={handleClearCompletedInvoices}
                 />
               )}
 

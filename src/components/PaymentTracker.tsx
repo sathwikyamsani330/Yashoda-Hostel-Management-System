@@ -30,6 +30,7 @@ interface PaymentTrackerProps {
   onRecordBusPayment?: (paymentId: string, method: PaymentMethod, receivedBy?: string) => void;
   onGenerateInvoices: (month: string, dueDate: string) => void;
   onDeletePayment: (paymentId: string) => void;
+  onClearCompletedInvoices: () => void;
 }
 
 export default function PaymentTracker({ 
@@ -39,7 +40,8 @@ export default function PaymentTracker({
   onRecordPayment,
   onRecordBusPayment,
   onGenerateInvoices,
-  onDeletePayment
+  onDeletePayment,
+  onClearCompletedInvoices
 }: PaymentTrackerProps) {
   // States
   const [searchQuery, setSearchQuery] = useState('');
@@ -336,6 +338,16 @@ Thank you!
           >
             <FileSpreadsheet className="w-4 h-4" />
             Generate Month Bills
+          </button>
+
+          <button
+            id="clear-completed-bills-btn"
+            onClick={onClearCompletedInvoices}
+            className="flex items-center justify-center gap-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold px-4 py-2.5 rounded-xl transition-all border border-rose-100 cursor-pointer text-sm shadow-2xs active:scale-[0.98]"
+            title="Delete paid invoices for checked-out or deleted residents"
+          >
+            <Trash2 className="w-4 h-4" />
+            Clear Completed Dues
           </button>
         </div>
       </div>
