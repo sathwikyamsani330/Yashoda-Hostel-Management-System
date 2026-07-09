@@ -16,6 +16,28 @@ import { Room, Resident, Payment, Complaint, Expense } from './types';
 
 // Helper to retrieve the current active configuration
 export const getActiveFirebaseConfig = () => {
+  // Check URL params first for shared live sync settings
+  try {
+    if (typeof window !== 'undefined' && window.location && window.location.search) {
+      const params = new URLSearchParams(window.location.search);
+      const dbParam = params.get('db_sync');
+      if (dbParam) {
+        const decoded = atob(dbParam);
+        const parsed = JSON.parse(decoded);
+        if (parsed.projectId && parsed.apiKey) {
+          localStorage.setItem('yashoda_firebase_config', JSON.stringify(parsed));
+          // Clean the query parameters from the address bar to keep it tidy
+          const url = new URL(window.location.href);
+          url.searchParams.delete('db_sync');
+          window.history.replaceState({}, '', url.toString());
+          return parsed;
+        }
+      }
+    }
+  } catch (e) {
+    console.error("Failed to parse firebase config from URL param", e);
+  }
+
   try {
     const saved = localStorage.getItem('yashoda_firebase_config');
     if (saved) {

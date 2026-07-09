@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Sparkles, AlertTriangle, CheckCircle, Copy, Save, RefreshCw, Trash2, HelpCircle, ExternalLink } from 'lucide-react';
+import { X, Sparkles, AlertTriangle, CheckCircle, Copy, Save, RefreshCw, Trash2, HelpCircle, ExternalLink, Share2 } from 'lucide-react';
 import { getActiveFirebaseConfig } from '../firebase';
 
 interface DatabaseSettingsModalProps {
@@ -21,6 +21,7 @@ export default function DatabaseSettingsModal({ isOpen, onClose }: DatabaseSetti
   const [rulesCopied, setRulesCopied] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
+  const [shareUrlCopied, setShareUrlCopied] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -286,6 +287,38 @@ service cloud.firestore {
                 <p className="text-slate-500 mt-2 text-[10px] leading-normal font-sans">
                   💡 Tip: You can paste these into your local <code>.env</code> file or the Environment Variables section of your hosting provider (like Vercel) for permanent out-of-the-box sync on all devices.
                 </p>
+              </div>
+            )}
+
+            {/* Share Connection Link */}
+            {config.projectId && config.apiKey && (
+              <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs text-indigo-900 leading-normal">
+                <div className="flex-1">
+                  <p className="font-bold text-slate-900 text-xs mb-0.5">Share Live Sync Link</p>
+                  <p className="text-2xs text-slate-500 leading-normal">
+                    Generate a link with this Firebase connection profile pre-loaded. Sharing this link with other members lets them automatically sync with your database immediately!
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cleanConfig = {
+                      apiKey: config.apiKey,
+                      authDomain: config.authDomain,
+                      projectId: config.projectId,
+                      storageBucket: config.storageBucket,
+                      messagingSenderId: config.messagingSenderId,
+                      appId: config.appId
+                    };
+                    const encoded = btoa(JSON.stringify(cleanConfig));
+                    const shareUrl = `${window.location.origin}${window.location.pathname}?db_sync=${encoded}`;
+                    copyToClipboard(shareUrl, setShareUrlCopied);
+                  }}
+                  className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white font-semibold rounded-xl text-2xs transition-all cursor-pointer inline-flex items-center gap-1.5 shrink-0 self-start sm:self-center shadow-xs border-0"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  {shareUrlCopied ? 'Link Copied!' : 'Copy Shareable Link'}
+                </button>
               </div>
             )}
 
