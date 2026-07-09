@@ -28,6 +28,7 @@ import {
   seedDatabaseIfEmpty,
   dbAddRoom, 
   dbEditRoom, 
+  dbDeleteRoom,
   dbAddResident, 
   dbEditResident, 
   dbDeleteResident, 
@@ -431,6 +432,20 @@ export default function App() {
 
   const handleEditRoom = async (updatedRoom: Room) => {
     await dbEditRoom({ ...updatedRoom, hostelId: activeHostelId });
+  };
+
+  const handleDeleteRoom = async (roomId: string) => {
+    const room = rooms.find(r => r.id === roomId && r.hostelId === activeHostelId);
+    if (!room) return;
+
+    if (room.residentIds && room.residentIds.length > 0) {
+      alert(`Cannot delete Room ${roomId} because it currently has active residents. Please check-out or reassign the residents first.`);
+      return;
+    }
+
+    if (window.confirm(`Are you sure you want to delete Room ${roomId}? Yes/No`)) {
+      await dbDeleteRoom(activeHostelId, roomId);
+    }
   };
 
   const handleCheckIn = async (newResident: Resident, roomId: string) => {
@@ -1392,6 +1407,7 @@ export default function App() {
                   onAddRoom={handleAddRoom}
                   onEditRoom={handleEditRoom}
                   onSelectResident={handleSelectResidentProfile}
+                  onDeleteRoom={handleDeleteRoom}
                 />
               )}
 

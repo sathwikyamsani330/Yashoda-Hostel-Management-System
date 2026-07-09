@@ -167,6 +167,10 @@ export const dbEditRoom = async (room: Room) => {
   await setDoc(doc(db, 'rooms', `${room.hostelId || '1'}_${room.id}`), room);
 };
 
+export const dbDeleteRoom = async (hostelId: string, id: string) => {
+  await deleteDoc(doc(db, 'rooms', `${hostelId || '1'}_${id}`));
+};
+
 // Residents
 export const dbAddResident = async (resident: Resident) => {
   await setDoc(doc(db, 'residents', resident.id), resident);

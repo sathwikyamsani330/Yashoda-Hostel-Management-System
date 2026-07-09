@@ -12,7 +12,8 @@ import {
   ChevronRight,
   Sparkles,
   Layers,
-  Edit2
+  Edit2,
+  Trash2
 } from 'lucide-react';
 import { Room, RoomType, Resident } from '../types';
 import { formatCurrency } from '../utils';
@@ -23,6 +24,7 @@ interface RoomManagerProps {
   onAddRoom: (room: Room) => void;
   onEditRoom: (room: Room) => void;
   onSelectResident: (residentId: string) => void;
+  onDeleteRoom: (roomId: string) => void;
 }
 
 const AVAILABLE_AMENITIES = [
@@ -34,6 +36,17 @@ const AVAILABLE_AMENITIES = [
   'Balcony',
   'Common Bath'
 ];
+
+const getSharingLabel = (type: RoomType) => {
+  switch (type) {
+    case 'Single': return 'Single sharing';
+    case 'Double': return 'Double sharing';
+    case 'Triple': return 'Triple sharing';
+    case 'Quadruple': return 'Four sharing';
+    case 'Quintuple': return 'Five sharing';
+    default: return `${type} sharing`;
+  }
+};
 
 export default function RoomManager({ 
   rooms, 
@@ -373,7 +386,7 @@ export default function RoomManager({
                         <div className="flex items-center gap-2">
                           <h3 className="text-xl font-display font-bold text-gray-900">Room {room.id}</h3>
                         </div>
-                        <p className="text-gray-500 text-xs mt-1">Floor {room.floor} • {room.type} sharing</p>
+                        <p className="text-gray-500 text-xs mt-1">Floor {room.floor} • {getSharingLabel(room.type)}</p>
                       </div>
 
                       <div className="text-right">
@@ -449,13 +462,23 @@ export default function RoomManager({
                     }`}>
                       {availableSpots > 0 ? `● ${availableSpots} Bed Vacant` : '● Fully Booked'}
                     </span>
-                    <button
-                      onClick={() => openEditModal(room)}
-                      className="text-xs text-gray-500 hover:text-indigo-600 hover:underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <Edit2 className="w-3 h-3" />
-                      Configure
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => openEditModal(room)}
+                        className="text-xs text-gray-500 hover:text-indigo-600 hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                        Configure
+                      </button>
+                      <button
+                        onClick={() => onDeleteRoom(room.id)}
+                        className="text-xs text-gray-400 hover:text-rose-600 flex items-center gap-0.5 cursor-pointer font-semibold"
+                        title="Delete Room"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 </motion.div>
               );
@@ -493,7 +516,7 @@ export default function RoomManager({
                     return (
                       <tr key={room.id} className="hover:bg-gray-50/50 transition-colors">
                         <td className="py-4 px-6 font-semibold text-gray-950">Room {room.id}</td>
-                        <td className="py-4 px-6 text-gray-600">{room.type} sharing</td>
+                        <td className="py-4 px-6 text-gray-600">{getSharingLabel(room.type)}</td>
                         <td className="py-4 px-6 text-gray-500">Floor {room.floor}</td>
                         <td className="py-4 px-6 text-gray-600">{room.capacity} Beds</td>
                         <td className="py-4 px-6">
@@ -508,12 +531,22 @@ export default function RoomManager({
                         </td>
                         <td className="py-4 px-6 font-medium text-indigo-600">{formatCurrency(room.rent)}</td>
                         <td className="py-4 px-6 text-right">
-                          <button
-                            onClick={() => openEditModal(room)}
-                            className="bg-gray-100 hover:bg-indigo-50 hover:text-indigo-700 text-gray-700 text-xs px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer"
-                          >
-                            Configure
-                          </button>
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => openEditModal(room)}
+                              className="bg-gray-100 hover:bg-indigo-50 hover:text-indigo-700 text-gray-700 text-xs px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer"
+                            >
+                              Configure
+                            </button>
+                            <button
+                              onClick={() => onDeleteRoom(room.id)}
+                              className="bg-gray-100 hover:bg-rose-50 hover:text-rose-700 text-gray-700 text-xs px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer flex items-center gap-1"
+                              title="Delete Room"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Delete
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -591,8 +624,8 @@ export default function RoomManager({
                       <option value="Single">Single (1 Bed)</option>
                       <option value="Double">Double (2 Beds)</option>
                       <option value="Triple">Triple (3 Beds)</option>
-                      <option value="Quadruple">Quadruple (4 Beds)</option>
-                      <option value="Quintuple">Quintuple (5 Beds)</option>
+                      <option value="Quadruple">Four sharing (4 Beds)</option>
+                      <option value="Quintuple">Five sharing (5 Beds)</option>
                     </select>
                   </div>
 

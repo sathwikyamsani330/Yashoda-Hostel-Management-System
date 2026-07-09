@@ -1,120 +1,76 @@
 import { Room, Resident, Payment, Complaint, Expense } from './types';
 
-export const INITIAL_ROOMS: Room[] = [
-  // Hostel 1 (Yashoda Deluxe Boys Hostel)
-  {
-    id: '101',
-    hostelId: '1',
-    type: 'Single',
-    floor: 1,
-    wing: 'Wing A',
-    capacity: 1,
-    rent: 450,
-    amenities: ['AC', 'Wi-Fi', 'Attached Bath', 'Study Table'],
-    residentIds: ['res-1']
-  },
-  {
-    id: '102',
-    hostelId: '1',
-    type: 'Double',
-    floor: 1,
-    wing: 'Wing A',
-    capacity: 2,
-    rent: 300,
-    amenities: ['Wi-Fi', 'Attached Bath', 'Study Table', 'Balcony'],
-    residentIds: ['res-2']
-  },
-  {
-    id: '103',
-    hostelId: '1',
-    type: 'Double',
-    floor: 1,
-    wing: 'Wing B',
-    capacity: 2,
-    rent: 300,
-    amenities: ['Wi-Fi', 'Common Bath', 'Study Table'],
-    residentIds: []
-  },
-  {
-    id: '201',
-    hostelId: '1',
-    type: 'Single',
-    floor: 2,
-    wing: 'Wing A',
-    capacity: 1,
-    rent: 480,
-    amenities: ['AC', 'Wi-Fi', 'Attached Bath', 'Study Table', 'Refrigerator'],
-    residentIds: ['res-3']
-  },
-  {
-    id: '202',
-    hostelId: '1',
-    type: 'Triple',
-    floor: 2,
-    wing: 'Wing B',
-    capacity: 3,
-    rent: 220,
-    amenities: ['Wi-Fi', 'Common Bath', 'Study Table', 'Balcony'],
-    residentIds: ['res-4', 'res-5']
-  },
-  {
-    id: '203',
-    hostelId: '1',
-    type: 'Single',
-    floor: 2,
-    wing: 'Wing B',
-    capacity: 1,
-    rent: 450,
-    amenities: ['AC', 'Wi-Fi', 'Attached Bath', 'Study Table'],
-    residentIds: []
-  },
+const generateDefaultRooms = (): Room[] => {
+  const roomsList: Room[] = [];
+  
+  // Hostel 1 (Yashoda Deluxe Boys Hostel): 5 floors, 12 rooms per floor
+  for (let floor = 1; floor <= 5; floor++) {
+    for (let rNum = 1; rNum <= 12; rNum++) {
+      const id = `${floor}${rNum < 10 ? '0' : ''}${rNum}`;
+      const isDouble = rNum % 2 === 0;
+      const type = isDouble ? 'Double' : 'Single';
+      const capacity = isDouble ? 2 : 1;
+      const rent = isDouble ? 300 : 450;
+      const wing = rNum <= 6 ? 'Wing A' : 'Wing B';
+      const amenities = isDouble 
+        ? ['Wi-Fi', 'Attached Bath', 'Study Table']
+        : ['AC', 'Wi-Fi', 'Attached Bath', 'Study Table'];
 
-  // Hostel 2 (Yashoda-2 Deluxe Boys Hostel)
-  {
-    id: '101',
-    hostelId: '2',
-    type: 'Single',
-    floor: 1,
-    wing: 'Wing A',
-    capacity: 1,
-    rent: 450,
-    amenities: ['AC', 'Wi-Fi', 'Attached Bath', 'Study Table'],
-    residentIds: ['res-10']
-  },
-  {
-    id: '102',
-    hostelId: '2',
-    type: 'Double',
-    floor: 1,
-    wing: 'Wing A',
-    capacity: 2,
-    rent: 320,
-    amenities: ['Wi-Fi', 'Attached Bath', 'Study Table', 'Balcony'],
-    residentIds: ['res-11']
-  },
-  {
-    id: '103',
-    hostelId: '2',
-    type: 'Triple',
-    floor: 1,
-    wing: 'Wing B',
-    capacity: 3,
-    rent: 240,
-    amenities: ['Wi-Fi', 'Common Bath', 'Study Table'],
-    residentIds: []
-  },
-  {
-    id: '201',
-    hostelId: '2',
-    type: 'Single',
-    floor: 2,
-    wing: 'Wing A',
-    capacity: 1,
-    rent: 490,
-    amenities: ['AC', 'Wi-Fi', 'Attached Bath', 'Study Table', 'Refrigerator'],
-    residentIds: []
+      let residentIds: string[] = [];
+      if (id === '101') residentIds = ['res-1'];
+      if (id === '102') residentIds = ['res-2'];
+      if (id === '201') residentIds = ['res-3'];
+      if (id === '202') residentIds = ['res-4', 'res-5'];
+
+      roomsList.push({
+        id,
+        hostelId: '1',
+        type: type as any,
+        floor,
+        wing,
+        capacity,
+        rent,
+        amenities,
+        residentIds
+      });
+    }
   }
-];
+
+  // Hostel 2 (Yashoda-2 Deluxe Boys Hostel): 5 floors, 8 rooms per floor
+  for (let floor = 1; floor <= 5; floor++) {
+    for (let rNum = 1; rNum <= 8; rNum++) {
+      const id = `${floor}0${rNum}`;
+      const isDouble = rNum % 2 === 0;
+      const type = isDouble ? 'Double' : 'Single';
+      const capacity = isDouble ? 2 : 1;
+      const rent = isDouble ? 320 : 450;
+      const wing = rNum <= 4 ? 'Wing A' : 'Wing B';
+      const amenities = isDouble 
+        ? ['Wi-Fi', 'Attached Bath', 'Study Table']
+        : ['AC', 'Wi-Fi', 'Attached Bath', 'Study Table'];
+
+      let residentIds: string[] = [];
+      if (id === '101') residentIds = ['res-10'];
+      if (id === '102') residentIds = ['res-11'];
+
+      roomsList.push({
+        id,
+        hostelId: '2',
+        type: type as any,
+        floor,
+        wing,
+        capacity,
+        rent,
+        amenities,
+        residentIds
+      });
+    }
+  }
+
+  return roomsList;
+};
+
+export const INITIAL_ROOMS: Room[] = generateDefaultRooms();
 
 export const INITIAL_RESIDENTS: Resident[] = [
   // Hostel 1 (Yashoda Deluxe Boys Hostel)
