@@ -50,8 +50,7 @@ export default function StudentPortal({
 
   // Form States
   const [roomId, setRoomId] = useState('');
-  const [residentId, setResidentId] = useState('manual');
-  const [manualName, setManualName] = useState('');
+  const [residentId, setResidentId] = useState('');
   const [category, setCategory] = useState<ComplaintCategory>('Wi-Fi');
   const [priority, setPriority] = useState<ComplaintPriority>('Medium');
   const [title, setTitle] = useState('');
@@ -77,10 +76,8 @@ export default function StudentPortal({
     const residentsInRoom = residents.filter(r => r.hostelId === selectedHostelId && r.roomId?.trim() === trimmedId && r.status === 'Active');
     if (residentsInRoom.length > 0) {
       setResidentId(residentsInRoom[0].id);
-      setManualName('');
     } else {
-      setResidentId('manual');
-      setManualName('');
+      setResidentId('');
     }
   };
 
@@ -96,34 +93,31 @@ export default function StudentPortal({
     let studentName = '';
     let studentId = 'student-portal';
 
-    if (residentId === 'manual') {
-      if (!manualName.trim()) {
-        setErrorMsg('Please enter your name.');
+    if (!residentId || residentId === 'manual') {
+      setErrorMsg('Please select your name.');
+      return;
+    }
+
+    const selectedRes = residents.find(r => r.id === residentId);
+    if (selectedRes) {
+      studentName = selectedRes.name;
+      studentId = selectedRes.id;
+
+      // Perform Aadhaar Verification
+      const enteredLast4Digits = aadhaarVerification.trim();
+      const resident = {
+        ...selectedRes,
+        aadhaarLast4: selectedRes.aadhaarNumber ? selectedRes.aadhaarNumber.replace(/\D/g, '').slice(-4) : ''
+      };
+
+      if (enteredLast4Digits !== resident.aadhaarLast4) {
+        alert("Authentication failed. Last 4 Aadhaar digits do not match.");
+        setErrorMsg("Authentication failed. Last 4 Aadhaar digits do not match.");
         return;
       }
-      studentName = manualName.trim();
     } else {
-      const selectedRes = residents.find(r => r.id === residentId);
-      if (selectedRes) {
-        studentName = selectedRes.name;
-        studentId = selectedRes.id;
-
-        // Perform Aadhaar Verification
-        const enteredLast4Digits = aadhaarVerification.trim();
-        const resident = {
-          ...selectedRes,
-          aadhaarLast4: selectedRes.aadhaarNumber ? selectedRes.aadhaarNumber.replace(/\D/g, '').slice(-4) : ''
-        };
-
-        if (enteredLast4Digits !== resident.aadhaarLast4) {
-          alert("Authentication failed. Last 4 Aadhaar digits do not match.");
-          setErrorMsg("Authentication failed. Last 4 Aadhaar digits do not match.");
-          return;
-        }
-      } else {
-        setErrorMsg('Selected resident not found.');
-        return;
-      }
+      setErrorMsg('Selected resident not found.');
+      return;
     }
 
     if (!title.trim() || !description.trim()) {
@@ -281,7 +275,7 @@ export default function StudentPortal({
                         onClick={() => {
                           setSelectedHostelId('1');
                           setRoomId('');
-                          setResidentId('manual');
+                          setResidentId('');
                         }}
                         className={`py-2 px-3 rounded-lg text-xs font-semibold text-center cursor-pointer transition-all ${
                           selectedHostelId === '1'
@@ -296,7 +290,7 @@ export default function StudentPortal({
                         onClick={() => {
                           setSelectedHostelId('2');
                           setRoomId('');
-                          setResidentId('manual');
+                          setResidentId('');
                         }}
                         className={`py-2 px-3 rounded-lg text-xs font-semibold text-center cursor-pointer transition-all ${
                           selectedHostelId === '2'
@@ -329,31 +323,33 @@ export default function StudentPortal({
                     {/* Resident Name Select/Input */}
                     <div>
                       <label className="text-xs font-semibold text-slate-300 block mb-1">Your Name</label>
-                      {roomId && roomResidents.length > 0 ? (
-                        <div className="space-y-1.5">
-                          <select
-                            value={residentId}
-                            onChange={(e) => {
-                              setResidentId(e.target.value);
-                              setAadhaarVerification('');
-                            }}
-                            className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-sm text-slate-100 focus:outline-none focus:border-emerald-500 bg-slate-900"
-                          >
+                      <select
+                        value={residentId}
+                        onChange={(e) => {
+                          setResidentId(e.target.value);
+                          setAadhaarVerification('');
+                        }}
+                        disabled={!roomId || roomResidents.length === 0}
+                        className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-sm text-slate-100 focus:outline-none focus:border-emerald-500 bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                        required
+                      >
+                        {!roomId ? (
+                          <option value="">-- Select Room first --</option>
+                        ) : roomResidents.length === 0 ? (
+                          <option value="">-- No Residents --</option>
+                        ) : (
+                          <>
+                            <option value="">-- Select Your Name --</option>
                             {roomResidents.map(res => (
                               <option key={res.id} value={res.id}>{res.name}</option>
                             ))}
-                            <option value="manual">-- Other / Type manually --</option>
-                          </select>
-                        </div>
-                      ) : (
-                        <input
-                          type="text"
-                          placeholder="Enter your full name"
-                          value={manualName}
-                          onChange={(e) => setManualName(e.target.value)}
-                          className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-sm text-slate-100 focus:outline-none focus:border-emerald-500"
-                          required
-                        />
+                          </>
+                        )}
+                      </select>
+                      {roomId && roomResidents.length === 0 && (
+                        <p className="text-2xs text-rose-400 mt-1.5 font-medium animate-fadeIn">
+                          No residents are currently checked in to this room.
+                        </p>
                       )}
                     </div>
                   </div>
@@ -368,7 +364,6 @@ export default function StudentPortal({
                             type="button"
                             onClick={() => {
                               setResidentId(r.id);
-                              setManualName('');
                               setAadhaarVerification('');
                             }}
                             className={`px-2.5 py-1 rounded-lg text-3xs font-semibold transition-all cursor-pointer ${
@@ -380,27 +375,12 @@ export default function StudentPortal({
                             👤 {r.name}
                           </button>
                         ))}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setResidentId('manual');
-                            setManualName('');
-                            setAadhaarVerification('');
-                          }}
-                          className={`px-2.5 py-1 rounded-lg text-3xs font-semibold transition-all cursor-pointer ${
-                            residentId === 'manual'
-                              ? 'bg-emerald-600 text-white shadow-sm font-bold'
-                              : 'bg-slate-850 text-slate-300 hover:text-white hover:bg-slate-800'
-                          }`}
-                        >
-                          ✏️ Type Name Manually
-                        </button>
                       </div>
                     </div>
                   )}
 
                   {/* Aadhaar Verification component for checked-in residents */}
-                  {roomId && residentId !== 'manual' && (
+                  {roomId && residentId && residentId !== 'manual' && roomResidents.length > 0 && (
                     <motion.div
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -434,24 +414,6 @@ export default function StudentPortal({
                     </motion.div>
                   )}
 
-                  {/* Manual input if 'manual' is selected and roomResidents are present */}
-                  {roomId && roomResidents.length > 0 && residentId === 'manual' && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      className="space-y-1 animate-slideDown"
-                    >
-                      <label className="text-xs font-semibold text-slate-300 block">Type Your Name</label>
-                      <input
-                        type="text"
-                        placeholder="Enter your name"
-                        value={manualName}
-                        onChange={(e) => setManualName(e.target.value)}
-                        className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-sm text-slate-100 focus:outline-none focus:border-emerald-500"
-                        required
-                      />
-                    </motion.div>
-                  )}
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Category */}

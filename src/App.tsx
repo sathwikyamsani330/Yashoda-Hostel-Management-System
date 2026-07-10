@@ -226,7 +226,7 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     return params.get('mode') === 'student';
   });
-  const [loginUsername, setLoginUsername] = useState('');
+  const [loginUsername, setLoginUsername] = useState('Admin');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -240,7 +240,7 @@ export default function App() {
   const handleAdminLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
-    if (loginUsername.trim() === 'Admin' && loginPassword === 'Thiru#7245') {
+    if (loginUsername.trim() === 'Admin' && loginPassword === 'Yashoda#17') {
       setIsAdminLoggedIn(true);
       localStorage.setItem('admin_authenticated', 'true');
     } else {
@@ -253,7 +253,7 @@ export default function App() {
     setRecoveryError('');
     setRecoveredPassword('');
     if (securityPassword === 'Rudra@17') {
-      setRecoveredPassword('Thiru#7245');
+      setRecoveredPassword('Yashoda#17');
     } else {
       setRecoveryError('Incorrect security key. Access denied.');
     }
@@ -809,7 +809,7 @@ export default function App() {
                   <p className="text-xs text-gray-600">Your Warden credentials are:</p>
                   <div className="bg-white border border-emerald-100 p-3 rounded-xl inline-block text-left font-mono text-xs text-gray-800 space-y-1">
                     <div>Username: <strong className="text-indigo-600 select-all">Admin</strong></div>
-                    <div>Password: <strong className="text-indigo-600 select-all">Thiru#7245</strong></div>
+                    <div>Password: <strong className="text-indigo-600 select-all">Yashoda#17</strong></div>
                   </div>
                   <p className="text-4xs text-emerald-600 font-semibold uppercase tracking-wider">Use these credentials to sign in.</p>
                 </div>
