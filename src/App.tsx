@@ -489,7 +489,7 @@ export default function App() {
   };
 
   const handleCheckOut = async (residentId: string) => {
-    const resident = residents.find(r => r.id === residentId && r.hostelId === activeHostelId);
+    const resident = residents.find(r => r.id === residentId);
     if (!resident) return;
 
     // 1. Mark checked-out
@@ -503,11 +503,11 @@ export default function App() {
 
     // 2. Remove from room list
     if (resident.roomId) {
-      const room = rooms.find(r => r.id === resident.roomId && r.hostelId === activeHostelId);
+      const room = rooms.find(r => r.id === resident.roomId && r.hostelId === resident.hostelId);
       if (room) {
         const updatedRoom = {
           ...room,
-          residentIds: room.residentIds.filter(id => id !== residentId)
+          residentIds: (room.residentIds || []).filter(id => id !== residentId)
         };
         await dbEditRoom(updatedRoom);
       }
@@ -558,7 +558,7 @@ export default function App() {
   };
 
   const handleRecordPayment = async (paymentId: string, method: PaymentMethod, receivedBy?: string, collectedAmount?: number) => {
-    const payment = payments.find(p => p.id === paymentId && p.hostelId === activeHostelId);
+    const payment = payments.find(p => p.id === paymentId);
     if (!payment) return;
 
     const oldBusAmount = payment.busAmount || 0;
@@ -577,7 +577,7 @@ export default function App() {
     await dbEditPayment(updatedPayment);
 
     // 2. Decrease outstandingFees on the resident profile by the rent amount only
-    const res = residents.find(r => r.id === payment.residentId && r.hostelId === activeHostelId);
+    const res = residents.find(r => r.id === payment.residentId);
     if (res) {
       const updatedResident = {
         ...res,
@@ -588,7 +588,7 @@ export default function App() {
   };
 
   const handleRecordBusPayment = async (paymentId: string, method: PaymentMethod, receivedBy?: string, collectedAmount?: number) => {
-    const payment = payments.find(p => p.id === paymentId && p.hostelId === activeHostelId);
+    const payment = payments.find(p => p.id === paymentId);
     if (!payment) return;
 
     const oldBusAmount = payment.busAmount || 0;
@@ -608,7 +608,7 @@ export default function App() {
 
     // 2. Decrease outstandingFees on the resident profile by the bus amount
     if (payment.busStatus === 'Pending' && oldBusAmount) {
-      const res = residents.find(r => r.id === payment.residentId && r.hostelId === activeHostelId);
+      const res = residents.find(r => r.id === payment.residentId);
       if (res) {
         const updatedResident = {
           ...res,
@@ -620,12 +620,12 @@ export default function App() {
   };
 
   const handleDeletePayment = async (paymentId: string) => {
-    const payment = payments.find(p => p.id === paymentId && p.hostelId === activeHostelId);
+    const payment = payments.find(p => p.id === paymentId);
     if (!payment) return;
 
     // If payment was pending, decrease the resident's outstanding balance
     if (payment.status === 'Pending') {
-      const res = residents.find(r => r.id === payment.residentId && r.hostelId === activeHostelId);
+      const res = residents.find(r => r.id === payment.residentId);
       if (res) {
         const updatedResident = {
           ...res,
@@ -641,7 +641,7 @@ export default function App() {
   const handleClearCompletedInvoices = async () => {
     const invoicesToClear = payments.filter(p => {
       if (p.hostelId !== activeHostelId) return false;
-      const res = residents.find(r => r.id === p.residentId && r.hostelId === activeHostelId);
+      const res = residents.find(r => r.id === p.residentId);
       const isPaid = p.status === 'Paid' && (p.busStatus === 'Paid' || p.busStatus === 'Not Subscribed' || !p.busStatus);
       const isCheckedOutOrOrphan = !res || res.status === 'Checked-Out';
       return isPaid && isCheckedOutOrOrphan;

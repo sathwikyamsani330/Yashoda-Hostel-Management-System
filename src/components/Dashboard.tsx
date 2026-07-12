@@ -50,7 +50,7 @@ export default function Dashboard({
   // Calculations
   const activeResidents = residents.filter(r => r.status === 'Active');
   const totalCapacity = rooms.reduce((acc, r) => acc + r.capacity, 0);
-  const occupiedBeds = rooms.reduce((acc, r) => acc + r.residentIds.length, 0);
+  const occupiedBeds = activeResidents.filter(r => r.roomId).length;
   const occupancyRate = totalCapacity > 0 ? Math.round((occupiedBeds / totalCapacity) * 100) : 0;
   
   const totalOutstanding = activeResidents.reduce((acc, r) => acc + r.outstandingFees, 0);
@@ -78,7 +78,8 @@ export default function Dashboard({
   const floorCounts = rooms.reduce((acc: { [key: number]: { occupied: number; total: number } }, r) => {
     if (!acc[r.floor]) acc[r.floor] = { occupied: 0, total: 0 };
     acc[r.floor].total += r.capacity;
-    acc[r.floor].occupied += r.residentIds.length;
+    const occupantsCount = activeResidents.filter(res => res.roomId === r.id && res.hostelId === r.hostelId).length;
+    acc[r.floor].occupied += occupantsCount;
     return acc;
   }, {});
 

@@ -77,7 +77,10 @@ export default function RoomManager({
 
   // Calculations for stats
   const totalBeds = rooms.reduce((acc, r) => acc + r.capacity, 0);
-  const filledBeds = rooms.reduce((acc, r) => acc + r.residentIds.length, 0);
+  const filledBeds = rooms.reduce((acc, r) => {
+    const occupantsCount = residents.filter(res => res.roomId === r.id && res.hostelId === r.hostelId && res.status === 'Active').length;
+    return acc + occupantsCount;
+  }, 0);
   const availableBeds = totalBeds - filledBeds;
 
   const roomTypesCount = rooms.reduce((acc: { [key: string]: number }, r) => {
@@ -370,7 +373,7 @@ export default function RoomManager({
             </div>
           ) : (
             filteredRooms.map(room => {
-              const occupants = residents.filter(r => room.residentIds.includes(r.id) && r.status === 'Active');
+              const occupants = residents.filter(r => r.roomId === room.id && r.hostelId === room.hostelId && r.status === 'Active');
               const availableSpots = room.capacity - occupants.length;
 
               return (
@@ -510,7 +513,7 @@ export default function RoomManager({
                   </tr>
                 ) : (
                   filteredRooms.map(room => {
-                    const occupants = residents.filter(r => room.residentIds.includes(r.id) && r.status === 'Active');
+                    const occupants = residents.filter(r => r.roomId === room.id && r.hostelId === room.hostelId && r.status === 'Active');
                     const availableSpots = room.capacity - occupants.length;
 
                     return (
