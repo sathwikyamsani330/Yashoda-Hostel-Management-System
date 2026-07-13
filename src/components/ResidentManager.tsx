@@ -135,7 +135,10 @@ export default function ResidentManager({
   }
 
   // Find available rooms
-  const availableRooms = rooms.filter(r => r.residentIds.length < r.capacity);
+  const availableRooms = rooms.filter(r => {
+    const occupantsCount = residents.filter(res => res.roomId === r.id && res.status === 'Active').length;
+    return occupantsCount < r.capacity;
+  });
 
   const openCheckInModal = () => {
     setFormName('');
@@ -752,11 +755,15 @@ Thank you!
                         onChange={(e) => handleRoomChange(e.target.value)}
                         className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 bg-white"
                       >
-                        {availableRooms.map(r => (
-                          <option key={r.id} value={r.id}>
-                            Room {r.id} ({r.type} Suite - {r.capacity - r.residentIds.length} spots left - {formatCurrency(r.rent)}/mo)
-                          </option>
-                        ))}
+                        {availableRooms.map(r => {
+                          const occupantsCount = residents.filter(res => res.roomId === r.id && res.status === 'Active').length;
+                          const spotsLeft = r.capacity - occupantsCount;
+                          return (
+                            <option key={r.id} value={r.id}>
+                              Room {r.id} ({r.type} Suite - {spotsLeft} spots left - {formatCurrency(r.rent)}/mo)
+                            </option>
+                          );
+                        })}
                       </select>
                     )}
                     {(() => {
