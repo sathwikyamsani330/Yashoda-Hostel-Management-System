@@ -76,3 +76,14 @@ export const getBillingAmounts = (
     totalAmount: rentAmount + busFeeAmount
   };
 };
+
+export const getResidentOutstandingFees = (residentId: string, payments: Payment[]): number => {
+  return payments
+    .filter(p => p.residentId === residentId)
+    .reduce((total, p) => {
+      const rentOutstanding = p.status !== 'Paid' ? (p.amount - (p.busAmount || 0)) : 0;
+      const busOutstanding = p.busStatus === 'Pending' ? (p.busAmount || 0) : 0;
+      return total + rentOutstanding + busOutstanding;
+    }, 0);
+};
+

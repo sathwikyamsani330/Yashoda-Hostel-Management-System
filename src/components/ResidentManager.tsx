@@ -22,7 +22,7 @@ import {
   CheckCircle
 } from 'lucide-react';
 import { Resident, Room, Payment, Complaint } from '../types';
-import { formatCurrency, formatDate, getBillingAmounts } from '../utils';
+import { formatCurrency, formatDate, getBillingAmounts, getResidentOutstandingFees } from '../utils';
 
 interface ResidentManagerProps {
   residents: Resident[];
@@ -182,7 +182,8 @@ export default function ResidentManager({
     if (!res) return;
 
     // Strict rule: cannot checkout if outstanding fees are present
-    if (res.outstandingFees > 0) {
+    const outstandingFees = getResidentOutstandingFees(res.id, payments);
+    if (outstandingFees > 0) {
       return;
     }
 
@@ -197,14 +198,15 @@ export default function ResidentManager({
   };
 
   const getDuesWhatsAppContent = (r: Resident, target: 'resident' | 'nominee' = 'resident') => {
-    const phone = target === 'resident' ? r.phone : (r.emergencyContact?.phone || '');
+    let phone = target === 'resident' ? r.phone : (r.emergencyContact?.phone || '');
+    const outstandingFees = getResidentOutstandingFees(r.id, payments);
+    const formattedAmount = formatCurrency(outstandingFees);
     let phoneClean = phone.replace(/\D/g, '');
     if (phoneClean.length === 10) {
       phoneClean = '91' + phoneClean;
     }
 
     const hostelName = r.hostelId === '2' ? 'Yashoda-2 Deluxe Boys Hostel' : 'Yashoda Deluxe Boys Hostel';
-    const formattedAmount = formatCurrency(r.outstandingFees);
     
     // Get months that have dues
     const unpaidList = payments.filter(p => p.residentId === r.id && p.status !== 'Paid');
@@ -272,10 +274,11 @@ Thank you!
     const matchesStatus = statusFilter === 'All' || r.status === statusFilter;
     
     let matchesFees = true;
+    const outstandingFees = getResidentOutstandingFees(r.id, payments);
     if (feeFilter === 'Has Dues') {
-      matchesFees = r.outstandingFees > 0;
+      matchesFees = outstandingFees > 0;
     } else if (feeFilter === 'No Dues') {
-      matchesFees = r.outstandingFees === 0;
+      matchesFees = outstandingFees === 0;
     }
 
     return matchesSearch && matchesStatus && matchesFees;
@@ -492,9 +495,9 @@ Thank you!
                     </td>
                     <td className="py-4 px-6">
                       <span className={`font-semibold ${
-                        res.outstandingFees > 0 ? 'text-rose-600' : 'text-gray-500'
+                        getResidentOutstandingFees(res.id, payments) > 0 ? 'text-rose-600' : 'text-gray-500'
                       }`}>
-                        {formatCurrency(res.outstandingFees)}
+                        {formatCurrency(getResidentOutstandingFees(res.id, payments))}
                       </span>
                     </td>
                     <td className="py-4 px-6 text-right text-xs text-gray-400">
@@ -980,11 +983,11 @@ Thank you!
                     <span className="text-gray-400 text-3xs font-semibold uppercase tracking-wider block">Dues & Ledgers</span>
                     <div className="flex items-center gap-2">
                       <span className={`text-xs font-semibold ${
-                        activeDetailResident.outstandingFees > 0 ? 'text-rose-600' : 'text-indigo-600'
+                        getResidentOutstandingFees(activeDetailResident.id, payments) > 0 ? 'text-rose-600' : 'text-indigo-600'
                       }`}>
-                        Outstanding: {formatCurrency(activeDetailResident.outstandingFees)}
+                        Outstanding: {formatCurrency(getResidentOutstandingFees(activeDetailResident.id, payments))}
                       </span>
-                      {activeDetailResident.outstandingFees > 0 && (
+                      {getResidentOutstandingFees(activeDetailResident.id, payments) > 0 && (
                         <button
                           onClick={() => openDuesReminder(activeDetailResident)}
                           className="inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-3xs font-semibold px-2 py-0.5 rounded-md transition-all cursor-pointer shadow-3xs"
@@ -1081,11 +1084,14 @@ Thank you!
               {/* Action Footer: Check-Out or Delete */}
               {activeDetailResident.status === 'Active' && (
                 <div className="bg-gray-50 border-t border-gray-100 p-4 px-6">
-                  {activeDetailResident.outstandingFees > 0 ? (
+                  {getResidentOutstandingFees(activeDetailResident.id, payments) > 0 ? (
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
-                      <div className="flex items-center gap-2 text-rose-600 text-xs font-semibold">
-                        <AlertCircle className="w-4 h-4 shrink-0" />
-                        <span>Unable to check out: Outstanding dues of {formatCurrency(activeDetailResident.outstandingFees)} must be cleared first.</span>
+                      <div className="flex items-start gap-2.5 bg-rose-50 border border-rose-200 text-rose-800 p-3.5 rounded-xl text-xs">
+                        <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-semibold">Checked-out Blocked</p>
+                          <span>Unable to check out: Outstanding dues of {formatCurrency(getResidentOutstandingFees(activeDetailResident.id, payments))} must be cleared first.</span>
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
                         {isConfirmingDetailDelete ? (

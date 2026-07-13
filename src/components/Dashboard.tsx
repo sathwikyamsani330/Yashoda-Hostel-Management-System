@@ -20,7 +20,7 @@ import {
   Bus
 } from 'lucide-react';
 import { Room, Resident, Payment, Complaint, Expense, ExpenseCategory } from '../types';
-import { formatCurrency, formatDate } from '../utils';
+import { formatCurrency, formatDate, getResidentOutstandingFees } from '../utils';
 
 interface DashboardProps {
   rooms: Room[];
@@ -53,7 +53,7 @@ export default function Dashboard({
   const occupiedBeds = activeResidents.filter(r => r.roomId).length;
   const occupancyRate = totalCapacity > 0 ? Math.round((occupiedBeds / totalCapacity) * 100) : 0;
   
-  const totalOutstanding = activeResidents.reduce((acc, r) => acc + r.outstandingFees, 0);
+  const totalOutstanding = activeResidents.reduce((acc, r) => acc + getResidentOutstandingFees(r.id, payments), 0);
   const pendingComplaints = complaints.filter(c => c.status !== 'Resolved');
 
   // Payment rate calculation (Paid vs Total for latest payments)

@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 
 import { Room, Resident, Payment, Complaint, PaymentMethod, ComplaintStatus, Expense } from './types';
-import { loadState, saveState, formatCurrency, getBillingAmounts } from './utils';
+import { loadState, saveState, formatCurrency, getBillingAmounts, getResidentOutstandingFees } from './utils';
 
 // Firebase imports
 import { collection, onSnapshot } from 'firebase/firestore';
@@ -368,9 +368,10 @@ export default function App() {
             updatedPayments.push(newInvoice);
             
             // Increment resident outstanding balance
+            const currentResPayments = updatedPayments.filter(p => p.residentId === res.id);
             res = {
               ...res,
-              outstandingFees: res.outstandingFees + totalAmount
+              outstandingFees: getResidentOutstandingFees(res.id, currentResPayments)
             };
             await dbEditResident(res);
             updatedResidents[i] = res;
@@ -576,12 +577,13 @@ export default function App() {
     };
     await dbEditPayment(updatedPayment);
 
-    // 2. Decrease outstandingFees on the resident profile by the rent amount only
+    // 2. Decrease outstandingFees on the resident profile by recalculating based on the updated payments
     const res = residents.find(r => r.id === payment.residentId);
     if (res) {
+      const residentPayments = payments.map(p => p.id === paymentId ? updatedPayment : p);
       const updatedResident = {
         ...res,
-        outstandingFees: Math.max(0, res.outstandingFees - oldRentAmount)
+        outstandingFees: getResidentOutstandingFees(res.id, residentPayments)
       };
       await dbEditResident(updatedResident);
     }
@@ -606,13 +608,14 @@ export default function App() {
     };
     await dbEditPayment(updatedPayment);
 
-    // 2. Decrease outstandingFees on the resident profile by the bus amount
+    // 2. Decrease outstandingFees on the resident profile by recalculating based on the updated payments
     if (payment.busStatus === 'Pending' && oldBusAmount) {
       const res = residents.find(r => r.id === payment.residentId);
       if (res) {
+        const residentPayments = payments.map(p => p.id === paymentId ? updatedPayment : p);
         const updatedResident = {
           ...res,
-          outstandingFees: Math.max(0, res.outstandingFees - oldBusAmount)
+          outstandingFees: getResidentOutstandingFees(res.id, residentPayments)
         };
         await dbEditResident(updatedResident);
       }
@@ -623,13 +626,14 @@ export default function App() {
     const payment = payments.find(p => p.id === paymentId);
     if (!payment) return;
 
-    // If payment was pending, decrease the resident's outstanding balance
+    // If payment was pending, recalculate the resident's outstanding balance excluding the deleted payment
     if (payment.status === 'Pending') {
       const res = residents.find(r => r.id === payment.residentId);
       if (res) {
+        const residentPayments = payments.filter(p => p.id !== paymentId);
         const updatedResident = {
           ...res,
-          outstandingFees: Math.max(0, res.outstandingFees - payment.amount)
+          outstandingFees: getResidentOutstandingFees(res.id, residentPayments)
         };
         await dbEditResident(updatedResident);
       }
