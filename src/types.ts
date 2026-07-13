@@ -38,6 +38,7 @@ export interface Resident {
   packageStartDate?: string;
   packageEndDate?: string;
   paymentStatus?: PaymentStatus;
+  allocatedSpot?: number;
 }
 
 export type PaymentStatus = 'Paid' | 'Pending' | 'Overdue' | 'Partial Payment';

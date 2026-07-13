@@ -24,6 +24,35 @@ import {
 import { Resident, Room, Payment, Complaint } from '../types';
 import { formatCurrency, formatDate, getBillingAmounts, getResidentOutstandingFees } from '../utils';
 
+const getRoomSpots = (room: Room, roomResidents: Resident[]) => {
+  const capacity = room.capacity;
+  const occupants = roomResidents.filter(r => r.roomId === room.id && r.status === 'Active');
+  
+  const spots: (Resident | null)[] = Array(capacity).fill(null);
+  const unplacedOccupants: Resident[] = [];
+  
+  occupants.forEach(occ => {
+    const spotIndex = occ.allocatedSpot ? occ.allocatedSpot - 1 : -1;
+    if (spotIndex >= 0 && spotIndex < capacity && spots[spotIndex] === null) {
+      spots[spotIndex] = occ;
+    } else {
+      unplacedOccupants.push(occ);
+    }
+  });
+  
+  unplacedOccupants.forEach(occ => {
+    const freeIndex = spots.indexOf(null);
+    if (freeIndex !== -1) {
+      spots[freeIndex] = occ;
+    }
+  });
+  
+  return spots.map((occupant, index) => ({
+    spotNumber: index + 1,
+    occupant
+  }));
+};
+
 interface ResidentManagerProps {
   residents: Resident[];
   rooms: Room[];
@@ -97,6 +126,7 @@ export default function ResidentManager({
   const [formSharingType, setFormSharingType] = useState<'3 Sharing' | '4 Sharing' | 'Other'>('3 Sharing');
   const [formPaymentPlan, setFormPaymentPlan] = useState<'Monthly' | '6 Months'>('Monthly');
   const [formBusOption, setFormBusOption] = useState<boolean>(false);
+  const [formAllocatedSpot, setFormAllocatedSpot] = useState<number>(1);
   const [formError, setFormError] = useState('');
 
   // Handle automatic details modal trigger from prop
@@ -112,7 +142,20 @@ export default function ResidentManager({
     setFormEmail('');
     setFormPhone('');
     setFormAadhaarNumber('');
-    setFormRoomId(availableRooms[0]?.id || '');
+    const initialRoomId = availableRooms[0]?.id || '';
+    setFormRoomId(initialRoomId);
+    if (initialRoomId) {
+      const selectedRoom = rooms.find(r => r.id === initialRoomId && r.hostelId === activeHostelId);
+      if (selectedRoom) {
+        const spots = getRoomSpots(selectedRoom, residents);
+        const firstAvailable = spots.find(s => s.occupant === null);
+        setFormAllocatedSpot(firstAvailable ? firstAvailable.spotNumber : 1);
+      } else {
+        setFormAllocatedSpot(1);
+      }
+    } else {
+      setFormAllocatedSpot(1);
+    }
     setFormEmergencyName('');
     setFormEmergencyRelation('Father');
     setFormEmergencyPhone('');
@@ -122,6 +165,18 @@ export default function ResidentManager({
     setFormBusOption(false);
     setFormError('');
     setIsCheckInOpen(true);
+  };
+
+  const handleRoomChange = (roomId: string) => {
+    setFormRoomId(roomId);
+    const selectedRoom = rooms.find(r => r.id === roomId && r.hostelId === activeHostelId);
+    if (selectedRoom) {
+      const spots = getRoomSpots(selectedRoom, residents);
+      const firstAvailable = spots.find(s => s.occupant === null);
+      setFormAllocatedSpot(firstAvailable ? firstAvailable.spotNumber : 1);
+    } else {
+      setFormAllocatedSpot(1);
+    }
   };
 
   const handleAadhaarChange = (val: string) => {
@@ -152,6 +207,25 @@ export default function ResidentManager({
       return;
     }
 
+    const selectedRoom = rooms.find(r => r.id === formRoomId && r.hostelId === activeHostelId);
+    if (!selectedRoom) {
+      setFormError('Selected room does not exist.');
+      return;
+    }
+
+    const activeOccupants = residents.filter(r => r.roomId === formRoomId && r.status === 'Active');
+    if (activeOccupants.length >= selectedRoom.capacity) {
+      setFormError('This room has reached its maximum sharing capacity.');
+      return;
+    }
+
+    const spots = getRoomSpots(selectedRoom, residents);
+    const targetSpot = spots.find(s => s.spotNumber === formAllocatedSpot);
+    if (targetSpot && targetSpot.occupant !== null) {
+      setFormError(`Spot ${formAllocatedSpot} is already occupied by ${targetSpot.occupant.name}. Please select an available spot.`);
+      return;
+    }
+
     const newResident: Resident = {
       id: `res-${Date.now()}`,
       name: formName.trim(),
@@ -170,7 +244,8 @@ export default function ResidentManager({
       aadhaarNumber: formAadhaarNumber.trim(),
       sharingType: formSharingType,
       paymentPlan: formPaymentPlan,
-      busOption: formBusOption
+      busOption: formBusOption,
+      allocatedSpot: formAllocatedSpot
     };
 
     onCheckIn(newResident, formRoomId);
@@ -674,7 +749,7 @@ Thank you!
                     ) : (
                       <select
                         value={formRoomId}
-                        onChange={(e) => setFormRoomId(e.target.value)}
+                        onChange={(e) => handleRoomChange(e.target.value)}
                         className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 bg-white"
                       >
                         {availableRooms.map(r => (
@@ -684,6 +759,42 @@ Thank you!
                         ))}
                       </select>
                     )}
+                    {(() => {
+                      const selectedRoom = rooms.find(r => r.id === formRoomId && r.hostelId === activeHostelId);
+                      if (!selectedRoom) return null;
+                      const spots = getRoomSpots(selectedRoom, residents);
+                      return (
+                        <div className="mt-3">
+                          <label className="text-xs font-semibold text-gray-700 block mb-1.5">Select Living Spot</label>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            {spots.map(spot => {
+                              const isOccupied = spot.occupant !== null;
+                              const isSelected = formAllocatedSpot === spot.spotNumber;
+                              return (
+                                <button
+                                  key={spot.spotNumber}
+                                  type="button"
+                                  disabled={isOccupied}
+                                  onClick={() => setFormAllocatedSpot(spot.spotNumber)}
+                                  className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                                    isOccupied 
+                                      ? 'bg-gray-50 border-gray-150 text-gray-400 cursor-not-allowed opacity-60' 
+                                      : isSelected
+                                      ? 'bg-indigo-50 border-indigo-500 text-indigo-700 shadow-3xs font-semibold'
+                                      : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-800'
+                                  }`}
+                                >
+                                  <span>Spot {spot.spotNumber}</span>
+                                  <span className="text-[10px] mt-0.5 font-normal">
+                                    {isOccupied ? 'Occupied' : 'Available'}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
