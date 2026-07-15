@@ -72,6 +72,16 @@ export default function App() {
   const [isAllDataLoaded, setIsAllDataLoaded] = useState(false);
   const schedulerHasRun = useRef(false);
   const [isDbSettingsOpen, setIsDbSettingsOpen] = useState(false);
+  const [loadTimeout, setLoadTimeout] = useState(false);
+
+  useEffect(() => {
+    if (isAllDataLoaded) return;
+    const timer = setTimeout(() => {
+      setLoadTimeout(true);
+    }, 6000);
+    return () => clearTimeout(timer);
+  }, [isAllDataLoaded]);
+
 
   // 1. Seed database on load
   useEffect(() => {
@@ -904,6 +914,45 @@ export default function App() {
     { id: 'payments', name: 'Fees & Invoices', icon: Receipt },
     { id: 'maintenance', name: 'Helpdesk Support', icon: Wrench },
   ] as const;
+
+  if (!isAllDataLoaded) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 font-sans">
+        <div className="w-full max-w-md bg-white border border-gray-200 rounded-3xl p-6 md:p-8 shadow-xl text-center space-y-6 animate-in fade-in zoom-in-95 duration-300">
+          <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto" />
+          <div className="space-y-2">
+            <h2 className="text-lg font-bold text-gray-900">Initializing System Database</h2>
+            <p className="text-xs text-gray-500">Connecting to real-time sync service...</p>
+          </div>
+          {loadTimeout && (
+            <div className="pt-2 space-y-3">
+              <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-xl p-3">
+                Connection is taking longer than expected. This could be due to slow network or invalid configuration.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setIsDbSettingsOpen(true)}
+                  className="flex-1 py-2 px-3 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-all cursor-pointer border-none"
+                >
+                  Configure Firebase
+                </button>
+                <button
+                  onClick={() => {
+                    localStorage.removeItem('yashoda_firebase_config');
+                    window.location.reload();
+                  }}
+                  className="flex-1 py-2 px-3 rounded-xl text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 transition-all cursor-pointer border-none"
+                >
+                  Reset to Mock DB
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        <DatabaseSettingsModal isOpen={isDbSettingsOpen} onClose={() => setIsDbSettingsOpen(false)} />
+      </div>
+    );
+  }
 
   if (isStudentView) {
     return (
