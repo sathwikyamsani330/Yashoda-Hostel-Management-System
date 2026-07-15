@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   DollarSign, 
+  Bell,
   CreditCard, 
   Search, 
   Plus, 
@@ -96,6 +97,9 @@ export default function PaymentTracker({
   const totalInvoiced = payments.reduce((acc, p) => acc + p.amount, 0);
   const totalPaid = payments.filter(p => p.status === 'Paid').reduce((acc, p) => acc + p.amount, 0);
   const totalUnpaid = totalInvoiced - totalPaid;
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const feeReminders = payments.filter(p => p.status !== 'Paid' && p.dueDate <= todayStr);
 
   // Filtered payments
   const filteredPayments = payments.filter(p => {
@@ -393,6 +397,67 @@ Thank you!
           </div>
         </div>
       </div>
+
+      {/* Fee Reminders List Panel */}
+      {feeReminders.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-4 shadow-3xs">
+          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 bg-rose-50 text-rose-600 rounded-lg">
+                <Bell className="w-4 h-4" />
+              </span>
+              <div>
+                <h4 className="text-sm font-display font-bold text-gray-950">Active Fee Reminders</h4>
+                <p className="text-gray-500 text-3xs mt-0.5">Please record payments to clear these reminders.</p>
+              </div>
+            </div>
+            <span className="bg-rose-50 text-rose-700 text-3xs font-semibold px-2 py-0.5 rounded-full">
+              {feeReminders.length} Active
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {feeReminders.map(p => {
+              const res = residents.find(r => r.id === p.residentId);
+              const branchName = p.hostelId === '2' ? 'Yashoda-2 Deluxe Boys' : 'Yashoda Deluxe Boys';
+              const packageType = p.packageType === '6 Months' ? '6-Month Package' : 'Monthly Package';
+              const isOverdue = p.status === 'Overdue' || p.dueDate < todayStr;
+              const statusLabel = isOverdue ? 'Overdue' : 'Due';
+
+              return (
+                <div key={p.id} className="p-3.5 bg-gray-50 border border-gray-150 rounded-xl space-y-2 text-xs relative overflow-hidden">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-semibold text-gray-900">{p.residentName}</p>
+                      <p className="text-3xs text-gray-500 font-mono mt-0.5">Room {p.roomId} • {branchName}</p>
+                    </div>
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                      isOverdue ? 'bg-rose-50 text-rose-700 border border-rose-100' : 'bg-amber-50 text-amber-700 border border-amber-100'
+                    }`}>
+                      {statusLabel}
+                    </span>
+                  </div>
+
+                  <div className="border-t border-gray-200/60 pt-2 space-y-1 text-3xs text-gray-500">
+                    <div className="flex justify-between">
+                      <span>Package Type:</span>
+                      <span className="font-medium text-gray-700">{packageType}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Due Date:</span>
+                      <span className="font-medium text-gray-700 font-mono">{formatDate(p.dueDate)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Amount Payable:</span>
+                      <span className="font-bold text-gray-950 font-mono">{formatCurrency(p.amount)}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Filters Toolbar */}
       <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-4 shadow-2xs">

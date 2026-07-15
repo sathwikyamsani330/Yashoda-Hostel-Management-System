@@ -55,6 +55,9 @@ export default function Dashboard({
   
   const totalOutstanding = activeResidents.reduce((acc, r) => acc + getResidentOutstandingFees(r.id, payments), 0);
   const pendingComplaints = complaints.filter(c => c.status !== 'Resolved');
+  
+  const todayStr = new Date().toISOString().split('T')[0];
+  const pendingRemindersCount = payments.filter(p => p.status !== 'Paid' && p.dueDate <= todayStr).length;
 
   // Payment rate calculation (Paid vs Total for latest payments)
   const paidPayments = payments.filter(p => p.status === 'Paid');
@@ -198,7 +201,7 @@ export default function Dashboard({
             id: "stat-outstanding",
             title: "Outstanding Fees",
             value: formatCurrency(totalOutstanding),
-            subtitle: "Unpaid resident dues",
+            subtitle: `${pendingRemindersCount} pending reminders`,
             icon: DollarSign,
             color: "amber",
             borderColor: "border-gray-200",

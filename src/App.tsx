@@ -183,7 +183,7 @@ export default function App() {
     c => c.hostelId === activeHostelId && c.status !== 'Resolved'
   );
   const alertPayments = payments.filter(
-    p => p.hostelId === activeHostelId && p.status === 'Overdue'
+    p => p.hostelId === activeHostelId && p.status !== 'Paid' && p.dueDate <= getTodayDateStr()
   );
 
   const activeNotifications = [
@@ -200,19 +200,26 @@ export default function App() {
         setIsNotificationsOpen(false);
       }
     })),
-    ...alertPayments.map(p => ({
-      id: `notif-pay-${p.id}`,
-      title: 'Payment Overdue',
-      description: `${p.residentName} (Room ${p.roomId}) owes ${formatCurrency(p.amount)}`,
-      type: 'payment',
-      meta: p.month,
-      color: 'text-rose-600',
-      bgColor: 'bg-rose-50',
-      action: () => {
-        setView('payments');
-        setIsNotificationsOpen(false);
-      }
-    }))
+    ...alertPayments.map(p => {
+      const today = getTodayDateStr();
+      const isOverdue = p.status === 'Overdue' || p.dueDate < today;
+      const statusLabel = isOverdue ? 'Overdue' : 'Due';
+      const hostelBranch = HOSTEL_NAMES[p.hostelId || '1'];
+      const packageType = p.packageType === '6 Months' ? '6-Month Package' : 'Monthly Package';
+      return {
+        id: `notif-pay-${p.id}`,
+        title: `Fee Reminder - ${statusLabel}`,
+        description: `Name: ${p.residentName} | Room: ${p.roomId} | Branch: ${hostelBranch} | Package: ${packageType} | Due: ${formatDate(p.dueDate)} | Amount: ${formatCurrency(p.amount)}`,
+        type: 'payment',
+        meta: statusLabel,
+        color: isOverdue ? 'text-rose-600' : 'text-amber-600',
+        bgColor: isOverdue ? 'bg-rose-50' : 'bg-amber-50',
+        action: () => {
+          setView('payments');
+          setIsNotificationsOpen(false);
+        }
+      };
+    })
   ];
   
   // Mobile drawer
@@ -459,6 +466,17 @@ export default function App() {
         room.rent
       );
 
+      const dateObj = new Date(newResident.checkInDate);
+      let monthName = dateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
+      
+      if (newResident.paymentPlan === '6 Months') {
+        const endCycleDate = new Date(newResident.checkInDate);
+        endCycleDate.setMonth(endCycleDate.getMonth() + 5);
+        const startStr = dateObj.toLocaleString('default', { month: 'short', year: 'numeric' });
+        const endStr = endCycleDate.toLocaleString('default', { month: 'short', year: 'numeric' });
+        monthName = `${startStr} - ${endStr}`;
+      }
+
       const initialPayment: Payment = {
         id: `pay-gen-${Date.now()}`,
         hostelId: activeHostelId,
@@ -466,15 +484,20 @@ export default function App() {
         residentName: newResident.name,
         roomId: roomId,
         amount: totalAmount,
-        month: 'July 2026',
-        dueDate: '2026-07-10',
+        month: monthName,
+        dueDate: newResident.checkInDate,
         status: 'Pending',
         paidDate: null,
         paymentMethod: null,
         busAmount: busFeeAmount,
         busStatus: newResident.busOption ? 'Pending' : 'Not Subscribed',
         busPaymentMethod: null,
-        busReceivedBy: null
+        busReceivedBy: null,
+        amountPaid: 0,
+        balance: totalAmount,
+        packageType: newResident.paymentPlan || 'Monthly',
+        checkInDate: newResident.checkInDate,
+        monthlyFee: rentAmount / (newResident.paymentPlan === '6 Months' ? 6 : 1)
       };
 
       // 4. Update the resident's outstanding balance
@@ -558,6 +581,83 @@ export default function App() {
     }
   };
 
+  const generateNextInvoice = async (residentId: string, currentPayments: Payment[]) => {
+    const res = residents.find(r => r.id === residentId);
+    if (!res || res.status !== 'Active' || !res.roomId) return;
+
+    const room = rooms.find(r => r.id === res.roomId && r.hostelId === res.hostelId);
+    const { rentAmount, busFeeAmount, totalAmount } = getResidentBillingAmounts(res, room);
+
+    // Find all payments for this resident
+    const resPayments = currentPayments.filter(p => p.residentId === residentId);
+    if (resPayments.length === 0) return;
+
+    // Find the latest payment by dueDate
+    const latestPayment = resPayments.reduce((prev, curr) => 
+      prev.dueDate > curr.dueDate ? prev : curr
+    );
+
+    // Calculate the next due date based on the package type
+    const intervalMonths = res.paymentPlan === '6 Months' ? 6 : 1;
+    const nextDate = new Date(latestPayment.dueDate);
+    nextDate.setMonth(nextDate.getMonth() + intervalMonths);
+    const nextDueDateStr = nextDate.toISOString().split('T')[0];
+
+    // Check if next invoice already exists
+    const nextInvoiceExists = currentPayments.some(p => 
+      p.residentId === residentId && p.dueDate === nextDueDateStr
+    );
+
+    if (!nextInvoiceExists) {
+      // Calculate month name
+      const dateObj = new Date(nextDueDateStr);
+      let monthName = dateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
+      if (res.paymentPlan === '6 Months') {
+        const endCycleDate = new Date(nextDueDateStr);
+        endCycleDate.setMonth(endCycleDate.getMonth() + 5);
+        const startStr = dateObj.toLocaleString('default', { month: 'short', year: 'numeric' });
+        const endStr = endCycleDate.toLocaleString('default', { month: 'short', year: 'numeric' });
+        monthName = `${startStr} - ${endStr}`;
+      }
+
+      const today = getTodayDateStr();
+      const isOverdue = nextDueDateStr < today;
+      const invoiceStatus = isOverdue ? 'Overdue' : 'Pending';
+
+      const newInvoice: Payment = {
+        id: `pay-auto-${res.id.slice(-4)}-${nextDueDateStr.replace(/-/g, '')}`,
+        hostelId: res.hostelId,
+        residentId: res.id,
+        residentName: res.name,
+        roomId: res.roomId,
+        amount: totalAmount,
+        month: monthName,
+        dueDate: nextDueDateStr,
+        status: invoiceStatus as any,
+        paidDate: null,
+        paymentMethod: null,
+        busAmount: busFeeAmount,
+        busStatus: res.busOption ? 'Pending' : 'Not Subscribed',
+        busPaymentMethod: null,
+        busReceivedBy: null,
+        amountPaid: 0,
+        balance: totalAmount,
+        packageType: res.paymentPlan || 'Monthly',
+        checkInDate: res.checkInDate,
+        monthlyFee: rentAmount / (res.paymentPlan === '6 Months' ? 6 : 1)
+      };
+
+      await dbAddPayment(newInvoice);
+      
+      // Also update resident outstandingFees
+      const newOutstanding = getResidentOutstandingFees(res.id, [...currentPayments, newInvoice]);
+      await dbEditResident({
+        ...res,
+        outstandingFees: newOutstanding
+      });
+    }
+  };
+
   const handleRecordPayment = async (paymentId: string, method: PaymentMethod, receivedBy?: string, collectedAmount?: number) => {
     const payment = payments.find(p => p.id === paymentId);
     if (!payment) return;
@@ -586,6 +686,9 @@ export default function App() {
         outstandingFees: getResidentOutstandingFees(res.id, residentPayments)
       };
       await dbEditResident(updatedResident);
+
+      // Generate the next due date invoice/reminder
+      await generateNextInvoice(res.id, residentPayments);
     }
   };
 
