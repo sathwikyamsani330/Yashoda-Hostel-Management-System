@@ -19,7 +19,12 @@ import {
 } from 'lucide-react';
 
 import { Room, Resident, Payment, Complaint, PaymentMethod, ComplaintStatus, Expense } from './types';
-import { formatCurrency, getBillingAmounts, getResidentOutstandingFees } from './utils';
+import {
+  formatCurrency,
+  formatDate,
+  getBillingAmounts,
+  getResidentOutstandingFees
+} from './utils';
 
 // Firebase imports
 import { collection, onSnapshot } from 'firebase/firestore';
