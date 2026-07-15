@@ -248,6 +248,7 @@ export default function ResidentManager({
       sharingType: formSharingType,
       paymentPlan: formPaymentPlan,
       busOption: formBusOption,
+      busPackage: formBusOption ? formPaymentPlan : undefined,
       allocatedSpot: formAllocatedSpot
     };
 

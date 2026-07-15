@@ -621,15 +621,62 @@ Thank you!
                   </td>
                 </tr>
               ) : (
-                filteredPayments.map(p => (
-                  <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="py-4 px-6 font-mono text-2xs font-semibold text-gray-500">
-                      {p.id}
-                    </td>
-                    <td className="py-4 px-6">
-                      <p className="font-medium text-gray-900">{p.residentName}</p>
-                      <span className="text-3xs text-gray-400 font-mono">ID: {p.residentId}</span>
-                    </td>
+                filteredPayments.map(p => {
+                  const res = residents.find(r => r.id === p.residentId);
+                  
+                  // Metadata calculations
+                  const checkIn = p.checkInDate || res?.checkInDate || 'N/A';
+                  const pkgType = p.packageType || (res?.paymentPlan === '6 Months' ? '6 Months' : 'Monthly');
+                  const hostelDur = pkgType === '6 Months' ? '6-Month Package' : 'Monthly Package';
+                  
+                  const busPkgType = res?.busPackage || (res?.busOption ? (pkgType || 'Monthly') : undefined);
+                  const busDur = busPkgType === '6 Months' 
+                    ? '6-Month Package' 
+                    : busPkgType === 'Monthly' 
+                    ? 'Monthly Package' 
+                    : 'Not Subscribed';
+                  
+                  // Expiry Date = Check-In Date + (6 Months / 1 Month)
+                  let expiryDate = 'N/A';
+                  if (checkIn !== 'N/A') {
+                    const date = new Date(checkIn);
+                    date.setMonth(date.getMonth() + (pkgType === '6 Months' ? 6 : 1));
+                    expiryDate = date.toISOString().split('T')[0];
+                  }
+                  
+                  // Next Due Date calculations
+                  let nextDue = 'N/A';
+                  if (p.status === 'Paid') {
+                    nextDue = expiryDate;
+                  } else {
+                    nextDue = p.dueDate;
+                  }
+
+                  const amtPaid = p.status === 'Paid' ? p.amount : 0;
+
+                  return (
+                    <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="py-4 px-6 font-mono text-2xs font-semibold text-gray-500">
+                        {p.id}
+                      </td>
+                      <td className="py-4 px-6">
+                        <p className="font-medium text-gray-900">{p.residentName}</p>
+                        <span className="text-3xs text-gray-400 font-mono block font-normal">ID: {p.residentId}</span>
+                        <div className="text-[10px] text-gray-500 mt-2 space-y-0.5 bg-gray-50 border border-gray-150 p-2 rounded-xl font-medium leading-tight max-w-[200px]">
+                          <div><span className="text-gray-400 font-semibold uppercase text-[8px] tracking-wider">Check-in:</span> {formatDate(checkIn)}</div>
+                          <div><span className="text-gray-400 font-semibold uppercase text-[8px] tracking-wider">Hostel Package:</span> {hostelDur}</div>
+                          <div><span className="text-gray-400 font-semibold uppercase text-[8px] tracking-wider">Bus Package:</span> {busDur}</div>
+                          <div><span className="text-gray-400 font-semibold uppercase text-[8px] tracking-wider">Amount Paid:</span> {formatCurrency(amtPaid)}</div>
+                          <div><span className="text-gray-400 font-semibold uppercase text-[8px] tracking-wider">Next Due Date:</span> {formatDate(nextDue)}</div>
+                          <div><span className="text-gray-400 font-semibold uppercase text-[8px] tracking-wider">Package Expiry Date:</span> {formatDate(expiryDate)}</div>
+                          <div>
+                            <span className="text-gray-400 font-semibold uppercase text-[8px] tracking-wider">Payment Status:</span>{' '}
+                            <span className={p.status === 'Paid' ? 'text-indigo-600 font-bold' : p.status === 'Pending' ? 'text-amber-600 font-bold' : 'text-rose-600 font-bold'}>
+                              {p.status}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
                     <td className="py-4 px-6 font-semibold text-gray-700">
                       Room {p.roomId}
                     </td>
@@ -772,8 +819,9 @@ Thank you!
                         </div>
                       </div>
                     </td>
-                  </tr>
-                ))
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

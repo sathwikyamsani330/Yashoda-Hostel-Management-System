@@ -34,6 +34,7 @@ export interface Resident {
   sharingType?: '3 Sharing' | '4 Sharing' | 'Other';
   paymentPlan?: 'Monthly' | '6 Months';
   busOption?: boolean;
+  busPackage?: 'Monthly' | '6 Months';
   monthlyFee?: number;
   packageStartDate?: string;
   packageEndDate?: string;

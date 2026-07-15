@@ -318,77 +318,94 @@ export default function App() {
         if (res.status !== 'Active' || !res.roomId) continue;
 
         const room = rooms.find(r => r.id === res.roomId && r.hostelId === res.hostelId);
-        const { rentAmount, busFeeAmount, totalAmount } = getResidentBillingAmounts(res, room);
+        const { rentAmount, busFeeAmount } = getResidentBillingAmounts(res, room);
 
-        // Start from check-in date and progress by interval
+        const rentInterval = res.paymentPlan === '6 Months' ? 6 : 1;
+        const busInterval = (res.busPackage || res.paymentPlan) === '6 Months' ? 6 : 1;
+
+        // Start from check-in date and progress by 1 month at a time (greatest common divisor)
         let anniversary = res.checkInDate;
-        const intervalMonths = res.paymentPlan === '6 Months' ? 6 : 1;
 
         // Keep generating cycles until the anniversary goes past today
         while (anniversary <= today) {
-          const dateObj = new Date(anniversary);
-          let monthName = dateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
-          
-          if (res.paymentPlan === '6 Months') {
-            // Format e.g., "Jan 2026 - Jun 2026"
-            const endCycleDate = new Date(anniversary);
-            endCycleDate.setMonth(endCycleDate.getMonth() + 5);
-            const startStr = dateObj.toLocaleString('default', { month: 'short', year: 'numeric' });
-            const endStr = endCycleDate.toLocaleString('default', { month: 'short', year: 'numeric' });
-            monthName = `${startStr} - ${endStr}`;
+          const monthsDiff = (() => {
+            const d1 = new Date(res.checkInDate);
+            const d2 = new Date(anniversary);
+            return (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth());
+          })();
+
+          const isRentDue = monthsDiff % rentInterval === 0;
+          const isBusDue = res.busOption && (monthsDiff % busInterval === 0);
+
+          if (isRentDue || isBusDue) {
+            const dateObj = new Date(anniversary);
+            let monthName = dateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
+            
+            const display6Months = (isRentDue && rentInterval === 6) || (isBusDue && busInterval === 6);
+            if (display6Months) {
+              const endCycleDate = new Date(anniversary);
+              endCycleDate.setMonth(endCycleDate.getMonth() + 5);
+              const startStr = dateObj.toLocaleString('default', { month: 'short', year: 'numeric' });
+              const endStr = endCycleDate.toLocaleString('default', { month: 'short', year: 'numeric' });
+              monthName = `${startStr} - ${endStr}`;
+            }
+
+            // Check if an invoice for this specific anniversary / billing month already exists
+            const invoiceExists = updatedPayments.some(p => 
+              p.residentId === res.id && 
+              (p.dueDate === anniversary || p.month === monthName)
+            );
+
+            if (!invoiceExists) {
+              const isOverdue = anniversary < today;
+              const invoiceStatus = isOverdue ? 'Overdue' : 'Pending';
+
+              const cycleRentAmount = isRentDue ? rentAmount : 0;
+              const cycleBusAmount = isBusDue ? busFeeAmount : 0;
+              const totalAmount = cycleRentAmount + cycleBusAmount;
+
+              const newInvoice: Payment = {
+                id: `pay-auto-${res.id.slice(-4)}-${anniversary.replace(/-/g, '')}`,
+                hostelId: res.hostelId,
+                residentId: res.id,
+                residentName: res.name,
+                roomId: res.roomId,
+                amount: totalAmount,
+                month: monthName,
+                dueDate: anniversary,
+                status: isRentDue ? (invoiceStatus as any) : 'Paid',
+                paidDate: isRentDue ? null : anniversary,
+                paymentMethod: isRentDue ? null : 'Cash',
+                busAmount: cycleBusAmount,
+                busStatus: isBusDue ? 'Pending' : (res.busOption ? 'Paid' : 'Not Subscribed'),
+                busPaymentMethod: null,
+                busReceivedBy: null,
+                amountPaid: 0,
+                balance: totalAmount,
+                packageType: res.paymentPlan || 'Monthly',
+                checkInDate: res.checkInDate,
+                monthlyFee: rentAmount / (res.paymentPlan === '6 Months' ? 6 : 1)
+              };
+
+              await dbAddPayment(newInvoice);
+              updatedPayments.push(newInvoice);
+              
+              // Increment resident outstanding balance
+              const currentResPayments = updatedPayments.filter(p => p.residentId === res.id);
+              res = {
+                ...res,
+                outstandingFees: getResidentOutstandingFees(res.id, currentResPayments)
+              };
+              await dbEditResident(res);
+              updatedResidents[i] = res;
+              
+              stateChanged = true;
+            }
           }
 
-          // Check if an invoice for this specific anniversary / billing month already exists
-          const invoiceExists = updatedPayments.some(p => 
-            p.residentId === res.id && 
-            (p.dueDate === anniversary || p.month === monthName)
-          );
-
-          if (!invoiceExists) {
-            const isOverdue = anniversary < today;
-            const invoiceStatus = isOverdue ? 'Overdue' : 'Pending';
-
-            const newInvoice: Payment = {
-              id: `pay-auto-${res.id.slice(-4)}-${anniversary.replace(/-/g, '')}`,
-              hostelId: res.hostelId,
-              residentId: res.id,
-              residentName: res.name,
-              roomId: res.roomId,
-              amount: totalAmount,
-              month: monthName,
-              dueDate: anniversary,
-              status: invoiceStatus as any,
-              paidDate: null,
-              paymentMethod: null,
-              busAmount: busFeeAmount,
-              busStatus: res.busOption ? 'Pending' : 'Not Subscribed',
-              busPaymentMethod: null,
-              busReceivedBy: null,
-              amountPaid: 0,
-              balance: totalAmount,
-              packageType: res.paymentPlan || 'Monthly',
-              checkInDate: res.checkInDate,
-              monthlyFee: rentAmount / (res.paymentPlan === '6 Months' ? 6 : 1)
-            };
-
-            await dbAddPayment(newInvoice);
-            updatedPayments.push(newInvoice);
-            
-            // Increment resident outstanding balance
-            const currentResPayments = updatedPayments.filter(p => p.residentId === res.id);
-            res = {
-              ...res,
-              outstandingFees: getResidentOutstandingFees(res.id, currentResPayments)
-            };
-            await dbEditResident(res);
-            updatedResidents[i] = res;
-            
-            stateChanged = true;
-          }
-
-          // Advance to next cycle date
+          // Advance to next month cycle date
           const nextDate = new Date(anniversary);
-          nextDate.setMonth(nextDate.getMonth() + intervalMonths);
+          nextDate.setMonth(nextDate.getMonth() + 1);
           anniversary = nextDate.toISOString().split('T')[0];
         }
       }
@@ -586,75 +603,91 @@ export default function App() {
     if (!res || res.status !== 'Active' || !res.roomId) return;
 
     const room = rooms.find(r => r.id === res.roomId && r.hostelId === res.hostelId);
-    const { rentAmount, busFeeAmount, totalAmount } = getResidentBillingAmounts(res, room);
+    const { rentAmount, busFeeAmount } = getResidentBillingAmounts(res, room);
 
-    // Find all payments for this resident
-    const resPayments = currentPayments.filter(p => p.residentId === residentId);
-    if (resPayments.length === 0) return;
+    const rentInterval = res.paymentPlan === '6 Months' ? 6 : 1;
+    const busInterval = (res.busPackage || res.paymentPlan) === '6 Months' ? 6 : 1;
 
-    // Find the latest payment by dueDate
-    const latestPayment = resPayments.reduce((prev, curr) => 
-      prev.dueDate > curr.dueDate ? prev : curr
-    );
+    // Find all paid payments for this resident to determine completed cycles
+    const paidPayments = currentPayments.filter(p => p.residentId === residentId && p.status === 'Paid');
+    const numPaidCycles = paidPayments.length;
 
-    // Calculate the next due date based on the package type
-    const intervalMonths = res.paymentPlan === '6 Months' ? 6 : 1;
-    const nextDate = new Date(latestPayment.dueDate);
-    nextDate.setMonth(nextDate.getMonth() + intervalMonths);
-    const nextDueDateStr = nextDate.toISOString().split('T')[0];
+    // Calculate next due date for Rent
+    const rentDate = new Date(res.checkInDate);
+    rentDate.setMonth(rentDate.getMonth() + (numPaidCycles * rentInterval));
+    const nextRentDueDateStr = rentDate.toISOString().split('T')[0];
 
-    // Check if next invoice already exists
-    const nextInvoiceExists = currentPayments.some(p => 
-      p.residentId === residentId && p.dueDate === nextDueDateStr
-    );
+    const today = getTodayDateStr();
 
-    if (!nextInvoiceExists) {
-      // Calculate month name
-      const dateObj = new Date(nextDueDateStr);
-      let monthName = dateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
-      if (res.paymentPlan === '6 Months') {
-        const endCycleDate = new Date(nextDueDateStr);
-        endCycleDate.setMonth(endCycleDate.getMonth() + 5);
-        const startStr = dateObj.toLocaleString('default', { month: 'short', year: 'numeric' });
-        const endStr = endCycleDate.toLocaleString('default', { month: 'short', year: 'numeric' });
-        monthName = `${startStr} - ${endStr}`;
+    // Check if the next rent due date has arrived (Strictly do not generate before due date)
+    if (nextRentDueDateStr <= today) {
+      // Calculate next bus due date
+      const paidBusPayments = currentPayments.filter(p => p.residentId === residentId && p.busStatus === 'Paid');
+      const numPaidBusCycles = paidBusPayments.length;
+      const busDate = new Date(res.checkInDate);
+      busDate.setMonth(busDate.getMonth() + (numPaidBusCycles * busInterval));
+      const nextBusDueDateStr = busDate.toISOString().split('T')[0];
+
+      const isRentDue = nextRentDueDateStr <= today;
+      const isBusDue = res.busOption && nextBusDueDateStr <= today;
+
+      const nextInvoiceExists = currentPayments.some(p => 
+        p.residentId === residentId && p.dueDate === nextRentDueDateStr
+      );
+
+      if (!nextInvoiceExists) {
+        // Calculate month name
+        const dateObj = new Date(nextRentDueDateStr);
+        let monthName = dateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
+        
+        const display6Months = (isRentDue && rentInterval === 6) || (isBusDue && busInterval === 6);
+        if (display6Months) {
+          const endCycleDate = new Date(nextRentDueDateStr);
+          endCycleDate.setMonth(endCycleDate.getMonth() + 5);
+          const startStr = dateObj.toLocaleString('default', { month: 'short', year: 'numeric' });
+          const endStr = endCycleDate.toLocaleString('default', { month: 'short', year: 'numeric' });
+          monthName = `${startStr} - ${endStr}`;
+        }
+
+        const isOverdue = nextRentDueDateStr < today;
+        const invoiceStatus = isOverdue ? 'Overdue' : 'Pending';
+
+        const cycleRentAmount = isRentDue ? rentAmount : 0;
+        const cycleBusAmount = isBusDue ? busFeeAmount : 0;
+        const totalAmount = cycleRentAmount + cycleBusAmount;
+
+        const newInvoice: Payment = {
+          id: `pay-auto-${res.id.slice(-4)}-${nextRentDueDateStr.replace(/-/g, '')}`,
+          hostelId: res.hostelId,
+          residentId: res.id,
+          residentName: res.name,
+          roomId: res.roomId,
+          amount: totalAmount,
+          month: monthName,
+          dueDate: nextRentDueDateStr,
+          status: isRentDue ? (invoiceStatus as any) : 'Paid',
+          paidDate: isRentDue ? null : nextRentDueDateStr,
+          paymentMethod: isRentDue ? null : 'Cash',
+          busAmount: cycleBusAmount,
+          busStatus: isBusDue ? 'Pending' : (res.busOption ? 'Paid' : 'Not Subscribed'),
+          busPaymentMethod: null,
+          busReceivedBy: null,
+          amountPaid: 0,
+          balance: totalAmount,
+          packageType: res.paymentPlan || 'Monthly',
+          checkInDate: res.checkInDate,
+          monthlyFee: rentAmount / (res.paymentPlan === '6 Months' ? 6 : 1)
+        };
+
+        await dbAddPayment(newInvoice);
+
+        // Update resident outstandingFees
+        const newOutstanding = getResidentOutstandingFees(res.id, [...currentPayments, newInvoice]);
+        await dbEditResident({
+          ...res,
+          outstandingFees: newOutstanding
+        });
       }
-
-      const today = getTodayDateStr();
-      const isOverdue = nextDueDateStr < today;
-      const invoiceStatus = isOverdue ? 'Overdue' : 'Pending';
-
-      const newInvoice: Payment = {
-        id: `pay-auto-${res.id.slice(-4)}-${nextDueDateStr.replace(/-/g, '')}`,
-        hostelId: res.hostelId,
-        residentId: res.id,
-        residentName: res.name,
-        roomId: res.roomId,
-        amount: totalAmount,
-        month: monthName,
-        dueDate: nextDueDateStr,
-        status: invoiceStatus as any,
-        paidDate: null,
-        paymentMethod: null,
-        busAmount: busFeeAmount,
-        busStatus: res.busOption ? 'Pending' : 'Not Subscribed',
-        busPaymentMethod: null,
-        busReceivedBy: null,
-        amountPaid: 0,
-        balance: totalAmount,
-        packageType: res.paymentPlan || 'Monthly',
-        checkInDate: res.checkInDate,
-        monthlyFee: rentAmount / (res.paymentPlan === '6 Months' ? 6 : 1)
-      };
-
-      await dbAddPayment(newInvoice);
-      
-      // Also update resident outstandingFees
-      const newOutstanding = getResidentOutstandingFees(res.id, [...currentPayments, newInvoice]);
-      await dbEditResident({
-        ...res,
-        outstandingFees: newOutstanding
-      });
     }
   };
 
