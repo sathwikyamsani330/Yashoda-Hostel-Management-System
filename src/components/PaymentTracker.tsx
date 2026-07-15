@@ -654,6 +654,17 @@ Thank you!
 
                   const amtPaid = p.status === 'Paid' ? p.amount : 0;
 
+                  // Dynamic Billing Period Text
+                  const dateObj = new Date(p.dueDate);
+                  const startMonthStr = dateObj.toLocaleString('default', { month: 'short', year: 'numeric' });
+                  let billingMonthText = startMonthStr;
+                  if (pkgType === '6 Months') {
+                    const endDate = new Date(p.dueDate);
+                    endDate.setMonth(endDate.getMonth() + 5);
+                    const endMonthStr = endDate.toLocaleString('default', { month: 'short', year: 'numeric' });
+                    billingMonthText = `${startMonthStr} - ${endMonthStr}`;
+                  }
+
                   return (
                     <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
                       <td className="py-4 px-6 font-mono text-2xs font-semibold text-gray-500">
@@ -666,6 +677,7 @@ Thank you!
                           <div><span className="text-gray-400 font-semibold uppercase text-[8px] tracking-wider">Check-in:</span> {formatDate(checkIn)}</div>
                           <div><span className="text-gray-400 font-semibold uppercase text-[8px] tracking-wider">Hostel Package:</span> {hostelDur}</div>
                           <div><span className="text-gray-400 font-semibold uppercase text-[8px] tracking-wider">Bus Package:</span> {busDur}</div>
+                          <div><span className="text-gray-400 font-semibold uppercase text-[8px] tracking-wider">Billing Duration:</span> {pkgType === '6 Months' ? '6 Months' : '1 Month'}</div>
                           <div><span className="text-gray-400 font-semibold uppercase text-[8px] tracking-wider">Amount Paid:</span> {formatCurrency(amtPaid)}</div>
                           <div><span className="text-gray-400 font-semibold uppercase text-[8px] tracking-wider">Next Due Date:</span> {formatDate(nextDue)}</div>
                           <div><span className="text-gray-400 font-semibold uppercase text-[8px] tracking-wider">Package Expiry Date:</span> {formatDate(expiryDate)}</div>
@@ -677,15 +689,16 @@ Thank you!
                           </div>
                         </div>
                       </td>
-                    <td className="py-4 px-6 font-semibold text-gray-700">
-                      Room {p.roomId}
-                    </td>
-                    <td className="py-4 px-6 text-gray-500">
-                      {p.month}
-                    </td>
-                    <td className="py-4 px-6 text-gray-500">
-                      {formatDate(p.dueDate)}
-                    </td>
+                      <td className="py-4 px-6 font-semibold text-gray-700">
+                        Room {p.roomId}
+                      </td>
+                      <td className="py-4 px-6 text-gray-500">
+                        <p className="font-semibold text-gray-900">{billingMonthText}</p>
+                        <span className="text-3xs text-gray-400 block mt-0.5">{pkgType === '6 Months' ? '6 Months' : '1 Month'}</span>
+                      </td>
+                      <td className="py-4 px-6 text-gray-500 font-semibold text-gray-750">
+                        {formatDate(nextDue)}
+                      </td>
                      <td className="py-4 px-6">
                       <div className="space-y-1">
                         <span className="font-semibold text-gray-950 block">
