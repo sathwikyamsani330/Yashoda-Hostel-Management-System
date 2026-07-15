@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 
 import { Room, Resident, Payment, Complaint, PaymentMethod, ComplaintStatus, Expense } from './types';
-import { loadState, saveState, formatCurrency, getBillingAmounts, getResidentOutstandingFees } from './utils';
+import { formatCurrency, getBillingAmounts, getResidentOutstandingFees } from './utils';
 
 // Firebase imports
 import { collection, onSnapshot } from 'firebase/firestore';
@@ -53,6 +53,15 @@ import MaintenanceHelpdesk from './components/MaintenanceHelpdesk';
 import StudentPortal from './components/StudentPortal';
 import DatabaseSettingsModal from './components/DatabaseSettingsModal';
 import { Lock, Eye, EyeOff, LogOut, ArrowRight } from 'lucide-react';
+
+// Helper to get Today's Date String
+const getTodayDateStr = () => {
+  const now = new Date();
+  if (now.getFullYear() < 2026) {
+    return '2026-07-07';
+  }
+  return now.toISOString().split('T')[0];
+};
 
 export default function App() {
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -285,14 +294,6 @@ export default function App() {
     await dbAddComplaint(newComplaint);
   };
 
-  // Helper to get Today's Date String
-  const getTodayDateStr = () => {
-    const now = new Date();
-    if (now.getFullYear() < 2026) {
-      return '2026-07-07';
-    }
-    return now.toISOString().split('T')[0];
-  };
 
   // Helper to compute resident rent and bus fees based on payment plan & sharing type
   const getResidentBillingAmounts = (res: Resident, room: Room | undefined) => {
