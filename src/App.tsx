@@ -545,6 +545,7 @@ export default function App() {
       await dbAddResident(finalResident);
       await dbEditRoom(updatedRoom);
       await dbAddPayment(initialPayment);
+    }
   };
 
   const handleEditResident = async (updatedResident: Resident, originalResident: Resident) => {
