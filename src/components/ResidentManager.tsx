@@ -1001,7 +1001,6 @@ Thank you!
                       );
                     })()}
                   </div>
-                </div>
 
                 {/* Section 3: Subscription & Billing Options */}
                 <div className="space-y-3 pt-2">
