@@ -465,12 +465,15 @@ export default function App() {
     const room = rooms.find(r => r.id === roomId && r.hostelId === activeHostelId);
     if (!room) return;
 
-    if (room.residentIds && room.residentIds.length > 0) {
-      alert(`Cannot delete Room ${roomId} because it currently has active residents. Please check-out or reassign the residents first.`);
+    const isAssigned = (room.residentIds && room.residentIds.length > 0) || 
+                       residents.some(res => res.roomId === roomId && res.hostelId === activeHostelId && res.status === 'Active');
+
+    if (isAssigned) {
+      alert("This room cannot be deleted because it is currently assigned to a resident.");
       return;
     }
 
-    if (window.confirm(`Are you sure you want to delete Room ${roomId}? Yes/No`)) {
+    if (window.confirm(`Are you sure you want to delete Room ${roomId}?`)) {
       await dbDeleteRoom(activeHostelId, roomId);
     }
   };
@@ -542,7 +545,165 @@ export default function App() {
       await dbAddResident(finalResident);
       await dbEditRoom(updatedRoom);
       await dbAddPayment(initialPayment);
+  };
+
+  const handleEditResident = async (updatedResident: Resident, originalResident: Resident) => {
+    const hostelId = updatedResident.hostelId || activeHostelId;
+    const room = rooms.find(r => r.id === updatedResident.roomId && r.hostelId === hostelId);
+
+    const billingParamsChanged = 
+      originalResident.hostelId !== updatedResident.hostelId ||
+      originalResident.roomId !== updatedResident.roomId ||
+      originalResident.sharingType !== updatedResident.sharingType ||
+      originalResident.paymentPlan !== updatedResident.paymentPlan ||
+      originalResident.checkInDate !== updatedResident.checkInDate ||
+      originalResident.busOption !== updatedResident.busOption ||
+      originalResident.feeAmount !== updatedResident.feeAmount;
+
+    let finalOutstandingFees = updatedResident.outstandingFees;
+
+    if (billingParamsChanged) {
+      const baseRent = updatedResident.feeAmount && updatedResident.feeAmount > 0 
+        ? updatedResident.feeAmount 
+        : (room?.rent || 0);
+
+      const { rentAmount, busFeeAmount, totalAmount } = getBillingAmounts(
+        hostelId,
+        updatedResident.sharingType,
+        updatedResident.paymentPlan,
+        updatedResident.busOption,
+        baseRent
+      );
+
+      const residentPayments = payments.filter(p => p.residentId === updatedResident.id);
+      const sortedPayments = [...residentPayments].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+      let anniversary = updatedResident.checkInDate;
+      const rentInterval = updatedResident.paymentPlan === '6 Months' ? 6 : 1;
+
+      const updatedPaymentsList: Payment[] = [];
+
+      for (let i = 0; i < sortedPayments.length; i++) {
+        const p = sortedPayments[i];
+        
+        const dateObj = new Date(anniversary);
+        let monthName = dateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
+        if (updatedResident.paymentPlan === '6 Months') {
+          const endCycleDate = new Date(anniversary);
+          endCycleDate.setMonth(endCycleDate.getMonth() + 5);
+          const startStr = dateObj.toLocaleString('default', { month: 'short', year: 'numeric' });
+          const endStr = endCycleDate.toLocaleString('default', { month: 'short', year: 'numeric' });
+          monthName = `${startStr} - ${endStr}`;
+        }
+
+        const isBusDue = updatedResident.busOption;
+        const cycleBusAmount = isBusDue ? busFeeAmount : 0;
+        const totalCycleAmount = rentAmount + cycleBusAmount;
+
+        const updatedP: Payment = {
+          ...p,
+          hostelId: hostelId,
+          roomId: updatedResident.roomId || '',
+          residentName: updatedResident.name,
+          amount: totalCycleAmount,
+          month: monthName,
+          dueDate: anniversary,
+          busAmount: cycleBusAmount,
+          busStatus: isBusDue ? (p.busStatus === 'Not Subscribed' ? 'Pending' : p.busStatus) : 'Not Subscribed',
+          balance: totalCycleAmount - (p.amountPaid || 0),
+          packageType: updatedResident.paymentPlan || 'Monthly',
+          checkInDate: updatedResident.checkInDate,
+          monthlyFee: rentAmount / (updatedResident.paymentPlan === '6 Months' ? 6 : 1)
+        };
+
+        if (updatedP.balance <= 0) {
+          updatedP.status = 'Paid';
+          updatedP.balance = 0;
+        } else {
+          const today = getTodayDateStr();
+          updatedP.status = anniversary < today ? 'Overdue' : 'Pending';
+        }
+
+        await dbEditPayment(updatedP);
+        updatedPaymentsList.push(updatedP);
+        
+        const nextDate = new Date(anniversary);
+        nextDate.setMonth(nextDate.getMonth() + rentInterval);
+        anniversary = nextDate.toISOString().split('T')[0];
+      }
+
+      finalOutstandingFees = updatedPaymentsList.reduce((total, p) => {
+        const rentOutstanding = p.status !== 'Paid' ? (p.amount - (p.busAmount || 0)) : 0;
+        const busOutstanding = p.busStatus === 'Pending' ? (p.busAmount || 0) : 0;
+        return total + rentOutstanding + busOutstanding;
+      }, 0);
+    } else {
+      const nameChanged = originalResident.name !== updatedResident.name;
+      const roomChanged = originalResident.roomId !== updatedResident.roomId || originalResident.hostelId !== updatedResident.hostelId;
+      if (nameChanged || roomChanged) {
+        const residentPayments = payments.filter(p => p.residentId === updatedResident.id);
+        for (const p of residentPayments) {
+          await dbEditPayment({
+            ...p,
+            residentName: updatedResident.name,
+            roomId: updatedResident.roomId || '',
+            hostelId: hostelId
+          });
+        }
+      }
     }
+
+    const nameChanged = originalResident.name !== updatedResident.name;
+    const roomChanged = originalResident.roomId !== updatedResident.roomId || originalResident.hostelId !== updatedResident.hostelId;
+    if (nameChanged || roomChanged) {
+      const residentComplaints = complaints.filter(c => c.residentId === updatedResident.id);
+      for (const c of residentComplaints) {
+        await dbEditComplaint({
+          ...c,
+          residentName: updatedResident.name,
+          roomId: updatedResident.roomId || '',
+          hostelId: hostelId
+        });
+      }
+    }
+
+    const finalResident: Resident = {
+      ...updatedResident,
+      outstandingFees: finalOutstandingFees
+    };
+    await dbEditResident(finalResident);
+
+    if (roomChanged) {
+      if (originalResident.roomId) {
+        const originalRoom = rooms.find(r => r.id === originalResident.roomId && r.hostelId === originalResident.hostelId);
+        if (originalRoom) {
+          const updatedOriginalRoom: Room = {
+            ...originalRoom,
+            residentIds: originalRoom.residentIds.filter(id => id !== updatedResident.id)
+          };
+          await dbEditRoom(updatedOriginalRoom);
+        }
+      }
+      if (updatedResident.roomId) {
+        const newRoom = rooms.find(r => r.id === updatedResident.roomId && r.hostelId === hostelId);
+        if (newRoom) {
+          const updatedNewRoom: Room = {
+            ...newRoom,
+            residentIds: [...newRoom.residentIds.filter(id => id !== updatedResident.id), updatedResident.id]
+          };
+          await dbEditRoom(updatedNewRoom);
+        }
+      }
+    } else if (originalResident.allocatedSpot !== updatedResident.allocatedSpot) {
+      if (updatedResident.roomId) {
+        const currentRoom = rooms.find(r => r.id === updatedResident.roomId && r.hostelId === hostelId);
+        if (currentRoom) {
+          await dbEditRoom({ ...currentRoom });
+        }
+      }
+    }
+
+    alert("Resident profile updated successfully!");
   };
 
   const handleCheckOut = async (residentId: string) => {
@@ -1590,11 +1751,12 @@ export default function App() {
 
               {view === 'residents' && (
                 <ResidentManager 
-                  residents={filteredResidents}
-                  rooms={filteredRooms}
-                  payments={filteredPayments}
-                  complaints={filteredComplaints}
+                  residents={residents}
+                  rooms={rooms}
+                  payments={payments}
+                  complaints={complaints}
                   onCheckIn={handleCheckIn}
+                  onEditResident={handleEditResident}
                   onCheckOut={handleCheckOut}
                   onDeleteResident={handleDeleteResident}
                   onClearCheckedOut={handleClearCheckedOut}

@@ -19,14 +19,15 @@ import {
   Trash2,
   Fingerprint,
   Copy,
-  CheckCircle
+  CheckCircle,
+  Edit2
 } from 'lucide-react';
 import { Resident, Room, Payment, Complaint } from '../types';
 import { formatCurrency, formatDate, getBillingAmounts, getResidentOutstandingFees } from '../utils';
 
-const getRoomSpots = (room: Room, roomResidents: Resident[]) => {
+const getRoomSpots = (room: Room, roomResidents: Resident[], editingResidentId?: string) => {
   const capacity = room.capacity;
-  const occupants = roomResidents.filter(r => r.roomId === room.id && r.status === 'Active');
+  const occupants = roomResidents.filter(r => r.roomId === room.id && r.hostelId === room.hostelId && r.status === 'Active' && (!editingResidentId || r.id !== editingResidentId));
   
   const spots: (Resident | null)[] = Array(capacity).fill(null);
   const unplacedOccupants: Resident[] = [];
@@ -59,6 +60,7 @@ interface ResidentManagerProps {
   payments: Payment[];
   complaints: Complaint[];
   onCheckIn: (resident: Resident, roomId: string) => void;
+  onEditResident: (updatedResident: Resident, originalResident: Resident) => void;
   onCheckOut: (residentId: string) => void;
   onDeleteResident: (residentId: string, resetStats?: boolean) => void;
   onClearCheckedOut: () => void;
@@ -75,6 +77,7 @@ export default function ResidentManager({
   payments, 
   complaints,
   onCheckIn, 
+  onEditResident,
   onCheckOut,
   onDeleteResident,
   onClearCheckedOut,
@@ -128,6 +131,16 @@ export default function ResidentManager({
   const [formBusOption, setFormBusOption] = useState<boolean>(false);
   const [formAllocatedSpot, setFormAllocatedSpot] = useState<number>(1);
   const [formError, setFormError] = useState('');
+  
+  // Custom edit states
+  const [formAddress, setFormAddress] = useState('');
+  const [formDeposit, setFormDeposit] = useState(0);
+  const [formFeeAmount, setFormFeeAmount] = useState(0);
+  const [formIdProof, setFormIdProof] = useState('');
+  const [formProfilePhoto, setFormProfilePhoto] = useState('');
+  const [formNotes, setFormNotes] = useState('');
+  const [formHostelId, setFormHostelId] = useState<'1' | '2'>('1');
+  const [editingResident, setEditingResident] = useState<Resident | null>(null);
 
   // Handle automatic details modal trigger from prop
   if (onSelectResidentId && detailResidentId !== onSelectResidentId) {
@@ -136,16 +149,42 @@ export default function ResidentManager({
 
   // Find available rooms
   const availableRooms = rooms.filter(r => {
-    const occupantsCount = residents.filter(res => res.roomId === r.id && res.status === 'Active').length;
+    if (r.hostelId !== formHostelId) return false;
+    
+    if (editingResident && r.id === editingResident.roomId && r.hostelId === editingResident.hostelId) {
+      return true;
+    }
+
+    const occupantsCount = residents.filter(res => 
+      res.roomId === r.id && 
+      res.hostelId === formHostelId && 
+      res.status === 'Active' && 
+      (!editingResident || res.id !== editingResident.id)
+    ).length;
     return occupantsCount < r.capacity;
   });
 
   const openCheckInModal = () => {
+    setEditingResident(null);
     setFormName('');
     setFormEmail('');
     setFormPhone('');
     setFormAadhaarNumber('');
-    const initialRoomId = availableRooms[0]?.id || '';
+    setFormHostelId(activeHostelId);
+    setFormAddress('');
+    setFormDeposit(0);
+    setFormFeeAmount(0);
+    setFormIdProof('');
+    setFormProfilePhoto('');
+    setFormNotes('');
+
+    const hostelRooms = rooms.filter(r => r.hostelId === activeHostelId);
+    const availRooms = hostelRooms.filter(r => {
+      const occupantsCount = residents.filter(res => res.roomId === r.id && res.hostelId === activeHostelId && res.status === 'Active').length;
+      return occupantsCount < r.capacity;
+    });
+
+    const initialRoomId = availRooms[0]?.id || hostelRooms[0]?.id || '';
     setFormRoomId(initialRoomId);
     if (initialRoomId) {
       const selectedRoom = rooms.find(r => r.id === initialRoomId && r.hostelId === activeHostelId);
@@ -170,11 +209,50 @@ export default function ResidentManager({
     setIsCheckInOpen(true);
   };
 
+  const openEditResidentModal = (res: Resident) => {
+    setEditingResident(res);
+    setFormName(res.name);
+    setFormEmail(res.email);
+    setFormPhone(res.phone);
+    setFormAadhaarNumber(res.aadhaarNumber || '');
+    setFormHostelId(res.hostelId || '1');
+    setFormRoomId(res.roomId || '');
+    setFormAllocatedSpot(res.allocatedSpot || 1);
+    setFormEmergencyName(res.emergencyContact?.name || '');
+    setFormEmergencyRelation(res.emergencyContact?.relation || 'Father');
+    setFormEmergencyPhone(res.emergencyContact?.phone || '');
+    setFormCheckInDate(res.checkInDate);
+    setFormSharingType(res.sharingType || '3 Sharing');
+    setFormPaymentPlan(res.paymentPlan || 'Monthly');
+    setFormBusOption(res.busOption || false);
+    setFormAddress(res.address || '');
+    setFormDeposit(res.deposit || 0);
+    setFormFeeAmount(res.feeAmount || 0);
+    setFormIdProof(res.idProof || '');
+    setFormProfilePhoto(res.profilePhoto || '');
+    setFormNotes(res.notes || '');
+
+    setFormError('');
+    setIsCheckInOpen(true);
+  };
+
   const handleRoomChange = (roomId: string) => {
     setFormRoomId(roomId);
-    const selectedRoom = rooms.find(r => r.id === roomId && r.hostelId === activeHostelId);
+    const selectedRoom = rooms.find(r => r.id === roomId && r.hostelId === formHostelId);
     if (selectedRoom) {
-      const spots = getRoomSpots(selectedRoom, residents);
+      const spots = getRoomSpots(selectedRoom, residents, editingResident?.id);
+      const firstAvailable = spots.find(s => s.occupant === null);
+      setFormAllocatedSpot(firstAvailable ? firstAvailable.spotNumber : 1);
+    } else {
+      setFormAllocatedSpot(1);
+    }
+  };
+
+  const handleRoomChangeForHostel = (roomId: string, hostelId: '1' | '2') => {
+    setFormRoomId(roomId);
+    const selectedRoom = rooms.find(r => r.id === roomId && r.hostelId === hostelId);
+    if (selectedRoom) {
+      const spots = getRoomSpots(selectedRoom, residents, editingResident?.id);
       const firstAvailable = spots.find(s => s.occupant === null);
       setFormAllocatedSpot(firstAvailable ? firstAvailable.spotNumber : 1);
     } else {
@@ -210,50 +288,110 @@ export default function ResidentManager({
       return;
     }
 
-    const selectedRoom = rooms.find(r => r.id === formRoomId && r.hostelId === activeHostelId);
+    const isAadhaarDuplicate = residents.some(r => 
+      (!editingResident || r.id !== editingResident.id) &&
+      r.aadhaarNumber && 
+      r.aadhaarNumber.replace(/\s/g, '') === cleanAadhaar
+    );
+    if (isAadhaarDuplicate) {
+      setFormError('A resident with this Aadhaar number already exists.');
+      return;
+    }
+
+    const selectedRoom = rooms.find(r => r.id === formRoomId && r.hostelId === formHostelId);
     if (!selectedRoom) {
       setFormError('Selected room does not exist.');
       return;
     }
 
-    const activeOccupants = residents.filter(r => r.roomId === formRoomId && r.status === 'Active');
-    if (activeOccupants.length >= selectedRoom.capacity) {
-      setFormError('This room has reached its maximum sharing capacity.');
-      return;
+    const roomChanged = !editingResident || editingResident.roomId !== formRoomId || editingResident.hostelId !== formHostelId;
+    const spotChanged = !editingResident || editingResident.allocatedSpot !== formAllocatedSpot;
+
+    if (roomChanged || spotChanged) {
+      const activeOccupants = residents.filter(r => 
+        r.roomId === formRoomId && 
+        r.hostelId === formHostelId && 
+        r.status === 'Active' && 
+        (!editingResident || r.id !== editingResident.id)
+      );
+      if (roomChanged && activeOccupants.length >= selectedRoom.capacity) {
+        setFormError('This room has reached its maximum sharing capacity.');
+        return;
+      }
+
+      const spots = getRoomSpots(selectedRoom, residents, editingResident?.id);
+      const targetSpot = spots.find(s => s.spotNumber === formAllocatedSpot);
+      if (targetSpot && targetSpot.occupant !== null) {
+        setFormError(`Spot ${formAllocatedSpot} is already occupied by ${targetSpot.occupant.name}. Please select an available spot.`);
+        return;
+      }
     }
 
-    const spots = getRoomSpots(selectedRoom, residents);
-    const targetSpot = spots.find(s => s.spotNumber === formAllocatedSpot);
-    if (targetSpot && targetSpot.occupant !== null) {
-      setFormError(`Spot ${formAllocatedSpot} is already occupied by ${targetSpot.occupant.name}. Please select an available spot.`);
-      return;
+    if (editingResident) {
+      const updatedResident: Resident = {
+        ...editingResident,
+        name: formName.trim(),
+        email: formEmail.trim(),
+        phone: formPhone.trim(),
+        roomId: formRoomId,
+        hostelId: formHostelId,
+        checkInDate: formCheckInDate,
+        emergencyContact: {
+          name: formEmergencyName.trim(),
+          relation: formEmergencyRelation,
+          phone: formEmergencyPhone.trim()
+        },
+        aadhaarNumber: formAadhaarNumber.trim(),
+        sharingType: formSharingType,
+        paymentPlan: formPaymentPlan,
+        busOption: formBusOption,
+        busPackage: formBusOption ? formPaymentPlan : undefined,
+        allocatedSpot: formAllocatedSpot,
+        address: formAddress.trim(),
+        deposit: formDeposit,
+        feeAmount: formFeeAmount,
+        idProof: formIdProof.trim(),
+        profilePhoto: formProfilePhoto.trim(),
+        notes: formNotes.trim()
+      };
+
+      onEditResident(updatedResident, editingResident);
+      setIsCheckInOpen(false);
+      setEditingResident(null);
+    } else {
+      const newResident: Resident = {
+        id: `res-${Date.now()}`,
+        name: formName.trim(),
+        email: formEmail.trim(),
+        phone: formPhone.trim(),
+        roomId: formRoomId,
+        hostelId: formHostelId,
+        checkInDate: formCheckInDate,
+        checkOutDate: null,
+        status: 'Active',
+        outstandingFees: 0,
+        emergencyContact: {
+          name: formEmergencyName.trim(),
+          relation: formEmergencyRelation,
+          phone: formEmergencyPhone.trim()
+        },
+        aadhaarNumber: formAadhaarNumber.trim(),
+        sharingType: formSharingType,
+        paymentPlan: formPaymentPlan,
+        busOption: formBusOption,
+        busPackage: formBusOption ? formPaymentPlan : undefined,
+        allocatedSpot: formAllocatedSpot,
+        address: formAddress.trim(),
+        deposit: formDeposit,
+        feeAmount: formFeeAmount,
+        idProof: formIdProof.trim(),
+        profilePhoto: formProfilePhoto.trim(),
+        notes: formNotes.trim()
+      };
+
+      onCheckIn(newResident, formRoomId);
+      setIsCheckInOpen(false);
     }
-
-    const newResident: Resident = {
-      id: `res-${Date.now()}`,
-      name: formName.trim(),
-      email: formEmail.trim(),
-      phone: formPhone.trim(),
-      roomId: formRoomId,
-      checkInDate: formCheckInDate,
-      checkOutDate: null,
-      status: 'Active',
-      outstandingFees: 0,
-      emergencyContact: {
-        name: formEmergencyName.trim(),
-        relation: formEmergencyRelation,
-        phone: formEmergencyPhone.trim()
-      },
-      aadhaarNumber: formAadhaarNumber.trim(),
-      sharingType: formSharingType,
-      paymentPlan: formPaymentPlan,
-      busOption: formBusOption,
-      busPackage: formBusOption ? formPaymentPlan : undefined,
-      allocatedSpot: formAllocatedSpot
-    };
-
-    onCheckIn(newResident, formRoomId);
-    setIsCheckInOpen(false);
   };
 
   const handleCheckOutClick = (residentId: string) => {
@@ -340,6 +478,8 @@ Thank you!
 
   // Filter residents
   const filteredResidents = residents.filter(r => {
+    if (r.hostelId !== activeHostelId) return false;
+
     const cleanQuery = searchQuery.replace(/\s/g, '').toLowerCase();
     const cleanAadhaar = (r.aadhaarNumber || '').replace(/\s/g, '');
     const cleanPhone = (r.phone || '').replace(/[^\d+]/g, '');
@@ -376,7 +516,7 @@ Thank you!
           <p className="text-gray-500 text-sm mt-0.5">Manage student check-ins, check-outs, contact details, and emergency logs.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {residents.some(r => r.status === 'Checked-Out') && (
+          {residents.some(r => r.hostelId === activeHostelId && r.status === 'Checked-Out') && (
             <div className="relative">
               {!pendingBulkClearCheckedOut ? (
                 <button
@@ -410,7 +550,7 @@ Thank you!
             </div>
           )}
 
-          {residents.some(r => r.status === 'Active') && (
+          {residents.some(r => r.hostelId === activeHostelId && r.status === 'Active') && (
             <div className="relative">
               {!pendingBulkClearActive ? (
                 <button
@@ -614,13 +754,25 @@ Thank you!
                           </div>
                         </div>
                       ) : (
-                        <button
-                          onClick={() => setPendingDeleteId(res.id)}
-                          className="p-1.5 hover:bg-rose-50 rounded-lg text-gray-400 hover:text-rose-600 transition-colors cursor-pointer inline-flex items-center justify-center"
-                          title="Delete resident record permanently"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openEditResidentModal(res);
+                            }}
+                            className="p-1.5 hover:bg-indigo-50 rounded-lg text-gray-400 hover:text-indigo-600 transition-colors cursor-pointer inline-flex items-center justify-center"
+                            title="Edit resident profile"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setPendingDeleteId(res.id)}
+                            className="p-1.5 hover:bg-rose-50 rounded-lg text-gray-400 hover:text-rose-600 transition-colors cursor-pointer inline-flex items-center justify-center"
+                            title="Delete resident record permanently"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -655,11 +807,18 @@ Thank you!
               {/* Header */}
               <div className="p-6 border-b border-gray-100 flex items-center justify-between shrink-0">
                 <div>
-                  <h3 className="text-lg font-display font-bold text-gray-950">Check-In Guest Resident</h3>
-                  <p className="text-gray-500 text-xs mt-0.5">Assign a bed space, collect details, and verify contact links.</p>
+                  <h3 className="text-lg font-display font-bold text-gray-950">
+                    {editingResident ? 'Edit Resident Profile' : 'Check-In Guest Resident'}
+                  </h3>
+                  <p className="text-gray-500 text-xs mt-0.5">
+                    {editingResident ? 'Update details, room allocation, and billing settings.' : 'Assign a bed space, collect details, and verify contact links.'}
+                  </p>
                 </div>
                 <button
-                  onClick={() => setIsCheckInOpen(false)}
+                  onClick={() => {
+                    setIsCheckInOpen(false);
+                    setEditingResident(null);
+                  }}
                   className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
                 >
                   <X className="w-5 h-5" />
@@ -738,39 +897,77 @@ Thank you!
                         required
                       />
                     </div>
+                    <div className="col-span-1 sm:col-span-2">
+                      <label className="text-xs font-semibold text-gray-700 block mb-1">Residential Address</label>
+                      <textarea
+                        placeholder="Enter full address..."
+                        value={formAddress}
+                        onChange={(e) => setFormAddress(e.target.value)}
+                        className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 min-h-[60px]"
+                      />
+                    </div>
                   </div>
                 </div>
 
                 {/* Section 2: Room Assignment */}
                 <div className="space-y-3 pt-2">
                   <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Room Placement</h4>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-700 block mb-1">Select Living Room</label>
-                    {availableRooms.length === 0 ? (
-                      <div className="bg-amber-50 border border-amber-100 text-amber-800 text-xs p-3 rounded-xl">
-                        No beds are currently available in any room. Please add a room or check out another resident first.
-                      </div>
-                    ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs font-semibold text-gray-700 block mb-1">Hostel Branch</label>
                       <select
-                        value={formRoomId}
-                        onChange={(e) => handleRoomChange(e.target.value)}
+                        value={formHostelId}
+                        onChange={(e) => {
+                          const newHostel = e.target.value as '1' | '2';
+                          setFormHostelId(newHostel);
+                          const hostelRooms = rooms.filter(r => r.hostelId === newHostel);
+                          const availRooms = hostelRooms.filter(r => {
+                            const occupantsCount = residents.filter(res => res.roomId === r.id && res.hostelId === newHostel && res.status === 'Active' && (!editingResident || res.id !== editingResident.id)).length;
+                            return occupantsCount < r.capacity;
+                          });
+                          const initialRoomId = availRooms[0]?.id || hostelRooms[0]?.id || '';
+                          handleRoomChangeForHostel(initialRoomId, newHostel);
+                        }}
                         className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 bg-white"
                       >
-                        {availableRooms.map(r => {
-                          const occupantsCount = residents.filter(res => res.roomId === r.id && res.status === 'Active').length;
-                          const spotsLeft = r.capacity - occupantsCount;
-                          return (
-                            <option key={r.id} value={r.id}>
-                              Room {r.id} ({r.type} Suite - {spotsLeft} spots left - {formatCurrency(r.rent)}/mo)
-                            </option>
-                          );
-                        })}
+                        <option value="1">Yashoda Deluxe Boys Hostel</option>
+                        <option value="2">Yashoda-2 Deluxe Boys Hostel</option>
                       </select>
-                    )}
-                    {(() => {
-                      const selectedRoom = rooms.find(r => r.id === formRoomId && r.hostelId === activeHostelId);
-                      if (!selectedRoom) return null;
-                      const spots = getRoomSpots(selectedRoom, residents);
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-gray-700 block mb-1">Select Living Room</label>
+                      {availableRooms.length === 0 ? (
+                        <div className="bg-amber-50 border border-amber-100 text-amber-800 text-xs p-3.5 rounded-xl">
+                          No beds are currently available in this hostel.
+                        </div>
+                      ) : (
+                        <select
+                          value={formRoomId}
+                          onChange={(e) => handleRoomChange(e.target.value)}
+                          className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 bg-white"
+                        >
+                          {availableRooms.map(r => {
+                            const occupantsCount = residents.filter(res => 
+                              res.roomId === r.id && 
+                              res.hostelId === formHostelId && 
+                              res.status === 'Active' && 
+                              (!editingResident || res.id !== editingResident.id)
+                            ).length;
+                            const spotsLeft = r.capacity - occupantsCount;
+                            return (
+                              <option key={r.id} value={r.id}>
+                                Room {r.id} ({r.type} Suite - {spotsLeft} spots left - {formatCurrency(r.rent)}/mo)
+                              </option>
+                            );
+                          })}
+                        </select>
+                      )}
+                    </div>
+                  </div>
+                  {(() => {
+                    const selectedRoom = rooms.find(r => r.id === formRoomId && r.hostelId === formHostelId);
+                    if (!selectedRoom) return null;
+                    const spots = getRoomSpots(selectedRoom, residents, editingResident?.id);
                       return (
                         <div className="mt-3">
                           <label className="text-xs font-semibold text-gray-700 block mb-1.5">Select Living Spot</label>
@@ -833,6 +1030,26 @@ Thank you!
                         <option value="6 Months">6 Months Package</option>
                       </select>
                     </div>
+                    <div>
+                      <label className="text-xs font-semibold text-gray-700 block mb-1">Security Deposit (₹)</label>
+                      <input
+                        type="number"
+                        placeholder="e.g. 5000"
+                        value={formDeposit || ''}
+                        onChange={(e) => setFormDeposit(Number(e.target.value))}
+                        className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-gray-700 block mb-1">Override Fee Amount (₹)</label>
+                      <input
+                        type="number"
+                        placeholder="Override room rent if any..."
+                        value={formFeeAmount || ''}
+                        onChange={(e) => setFormFeeAmount(Number(e.target.value))}
+                        className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 font-medium"
+                      />
+                    </div>
                   </div>
 
                   {/* Bus Option */}
@@ -857,12 +1074,16 @@ Thank you!
 
                   {/* Calculated Fees Preview */}
                   {(() => {
+                    const baseRent = formFeeAmount && formFeeAmount > 0
+                      ? formFeeAmount
+                      : (rooms.find(r => r.id === formRoomId && r.hostelId === formHostelId)?.rent || 0);
+
                     const billing = getBillingAmounts(
-                      activeHostelId,
+                      formHostelId,
                       formSharingType,
                       formPaymentPlan,
                       formBusOption,
-                      rooms.find(r => r.id === formRoomId)?.rent || 0
+                      baseRent
                     );
                     return (
                       <div className="p-3.5 bg-gray-50 border border-gray-150 rounded-xl space-y-1">
@@ -935,28 +1156,64 @@ Thank you!
                         required
                       />
                     </div>
+                {/* Section 5: Additional Info */}
+                <div className="space-y-3 pt-2">
+                  <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Additional Info</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs font-semibold text-gray-700 block mb-1">ID Proofs (e.g. PAN, Passport)</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Passport, PAN Card"
+                        value={formIdProof}
+                        onChange={(e) => setFormIdProof(e.target.value)}
+                        className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-gray-700 block mb-1">Profile Photo URL</label>
+                      <input
+                        type="text"
+                        placeholder="https://example.com/photo.jpg"
+                        value={formProfilePhoto}
+                        onChange={(e) => setFormProfilePhoto(e.target.value)}
+                        className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 font-mono"
+                      />
+                    </div>
+                    <div className="col-span-1 sm:col-span-2">
+                      <label className="text-xs font-semibold text-gray-700 block mb-1">Internal Notes</label>
+                      <textarea
+                        placeholder="Add private remarks or notes..."
+                        value={formNotes}
+                        onChange={(e) => setFormNotes(e.target.value)}
+                        className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 min-h-[60px]"
+                      />
+                    </div>
                   </div>
                 </div>
 
                 </div>
-
-                {/* Footer buttons */}
-                <div className="p-6 border-t border-gray-100 flex items-center justify-end gap-3 bg-gray-50/50 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setIsCheckInOpen(false)}
-                    className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 font-medium hover:bg-gray-50 rounded-xl cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={availableRooms.length === 0}
-                    className="px-5 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-medium rounded-xl transition-all shadow-sm shadow-indigo-200 cursor-pointer"
-                  >
-                    Complete Check-In
-                  </button>
-                </div>
+ 
+                 {/* Footer buttons */}
+                 <div className="p-6 border-t border-gray-100 flex items-center justify-end gap-3 bg-gray-50/50 shrink-0">
+                   <button
+                     type="button"
+                     onClick={() => {
+                       setIsCheckInOpen(false);
+                       setEditingResident(null);
+                     }}
+                     className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 font-medium hover:bg-gray-50 rounded-xl cursor-pointer"
+                   >
+                     Cancel
+                   </button>
+                   <button
+                     type="submit"
+                     disabled={availableRooms.length === 0 && !editingResident}
+                     className="px-5 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-medium rounded-xl transition-all shadow-sm shadow-indigo-200 cursor-pointer"
+                   >
+                     {editingResident ? 'Save Changes' : 'Complete Check-In'}
+                   </button>
+                 </div>
               </form>
             </motion.div>
           </div>
@@ -1005,16 +1262,28 @@ Thank you!
                     </div>
                   </div>
                 </div>
-                <button
-                  onClick={() => {
-                    setDetailResidentId(null);
-                    setConfirmCheckOutId(null);
-                    onClearSelectResident();
-                  }}
-                  className="p-1.5 rounded-lg hover:bg-white/10 text-slate-300 hover:text-white transition-colors cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      openEditResidentModal(activeDetailResident);
+                    }}
+                    className="p-1.5 rounded-lg hover:bg-white/10 text-slate-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1 text-xs font-semibold"
+                    title="Edit resident profile"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    <span>Edit</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setDetailResidentId(null);
+                      setConfirmCheckOutId(null);
+                      onClearSelectResident();
+                    }}
+                    className="p-1.5 rounded-lg hover:bg-white/10 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
 
               {/* Main Detailed Grid */}

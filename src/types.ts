@@ -40,6 +40,12 @@ export interface Resident {
   packageEndDate?: string;
   paymentStatus?: PaymentStatus;
   allocatedSpot?: number;
+  address?: string;
+  deposit?: number;
+  feeAmount?: number;
+  idProof?: string;
+  profilePhoto?: string;
+  notes?: string;
 }
 
 export type PaymentStatus = 'Paid' | 'Pending' | 'Overdue' | 'Partial Payment';

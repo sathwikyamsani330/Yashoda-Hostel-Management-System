@@ -53,7 +53,8 @@ export default function RoomManager({
   residents, 
   onAddRoom, 
   onEditRoom,
-  onSelectResident 
+  onSelectResident,
+  onDeleteRoom
 }: RoomManagerProps) {
   // Filters and views
   const [searchQuery, setSearchQuery] = useState('');
