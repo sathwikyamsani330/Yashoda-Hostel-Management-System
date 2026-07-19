@@ -1155,6 +1155,8 @@ Thank you!
                         required
                       />
                     </div>
+                  </div>
+                </div>
                 {/* Section 5: Additional Info */}
                 <div className="space-y-3 pt-2">
                   <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Additional Info</h4>
